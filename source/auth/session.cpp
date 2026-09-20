@@ -18,6 +18,7 @@
 #include <sstream>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <cstdio>
 #include <unistd.h>
 
 namespace {
@@ -294,13 +295,17 @@ bool load_user_session(UserSession& out) {
     json_t* r = json_object_get(root, "refresh_token");
     json_t* e = json_object_get(root, "expires_at");
     if (a && json_is_string(a))
-        out.access_token = json_string_value(a);
+        out.access_token = trim_copy(json_string_value(a));
     if (r && json_is_string(r))
-        out.refresh_token = json_string_value(r);
+        out.refresh_token = trim_copy(json_string_value(r));
     if (e && json_is_integer(e))
         out.expires_at = json_integer_value(e);
     json_decref(root);
     return !out.access_token.empty();
+}
+
+bool delete_saved_session() {
+    return std::remove(paths::auth_json().c_str()) == 0;
 }
 
 bool save_user_session(const UserSession& session) {
@@ -344,21 +349,14 @@ std::string build_authorize_url(const AppConfig& config, const std::string& code
     return oss.str();
 }
 
-bool ensure_user_access_token(const AppConfig& config, UserSession& session, std::string& error) {
-    long long now = static_cast<long long>(
-        std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch())
-            .count());
-
-    if (!session.access_token.empty() && session.expires_at > now)
-        return true;
-
+bool refresh_user_access_token(const AppConfig& config, UserSession& session, std::string& error) {
     if (session.refresh_token.empty() && config.refresh_token.empty()) {
         error = "Not logged in";
         return false;
     }
 
-    std::string refresh = !session.refresh_token.empty() ? session.refresh_token : config.refresh_token;
+    std::string refresh =
+        !session.refresh_token.empty() ? session.refresh_token : config.refresh_token;
     std::ostringstream body;
     body << "grant_type=refresh_token"
          << "&refresh_token=" << url_encode(refresh)
@@ -369,6 +367,18 @@ bool ensure_user_access_token(const AppConfig& config, UserSession& session, std
     if (!token_request(config, body.str(), session, error))
         return false;
     return save_user_session(session);
+}
+
+bool ensure_user_access_token(const AppConfig& config, UserSession& session, std::string& error) {
+    long long now = static_cast<long long>(
+        std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count());
+
+    if (!session.access_token.empty() && session.expires_at > now)
+        return true;
+
+    return refresh_user_access_token(config, session, error);
 }
 
 bool oauth_begin(const AppConfig& config, OAuthPending& pending, std::string& error) {

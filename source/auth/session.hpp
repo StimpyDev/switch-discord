@@ -12,9 +12,11 @@ struct UserSession {
 
 bool load_user_session(UserSession& out);
 bool save_user_session(const UserSession& session);
+bool delete_saved_session();
 
 // Returns valid bearer access token (refreshes if needed).
 bool ensure_user_access_token(const AppConfig& config, UserSession& session, std::string& error);
+bool refresh_user_access_token(const AppConfig& config, UserSession& session, std::string& error);
 
 std::string build_oauth_login_page_url(const AppConfig& config, const std::string& ip);
 std::string build_authorize_url(const AppConfig& config, const std::string& code_challenge,

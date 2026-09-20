@@ -12,6 +12,7 @@ namespace discord {
 struct ReadyGuild {
     std::string id;
     std::string name;
+    std::string icon;
 };
 
 class Gateway {

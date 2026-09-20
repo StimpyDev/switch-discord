@@ -12,6 +12,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -53,7 +54,7 @@ private:
 
     AppConfig config_;
     UserSession user_session_;
-    discord::Api api_;
+    std::optional<discord::Api> api_;
     std::unique_ptr<discord::Gateway> gateway_;
 
     SDL_Window* window_ = nullptr;

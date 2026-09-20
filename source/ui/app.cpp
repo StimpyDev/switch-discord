@@ -87,7 +87,7 @@ void draw_server_rail_icon(SDL_Renderer* r, TTF_Font* font, int y, bool active, 
 
 } // namespace
 
-DiscordApp::DiscordApp() : api_("") {}
+DiscordApp::DiscordApp() = default;
 
 DiscordApp::~DiscordApp() {
     shutdown();
@@ -158,10 +158,16 @@ bool DiscordApp::init(std::string& error) {
         return false;
 
     const std::string& access_token = user_session_.access_token;
-    api_ = discord::Api(access_token);
+    api_.emplace(access_token);
+    api_->set_token_refresher([this](std::string& new_token, std::string& err) {
+        if (!refresh_user_access_token(config_, user_session_, err))
+            return false;
+        new_token = user_session_.access_token;
+        return !new_token.empty();
+    });
 
     std::string gw_url;
-    if (!api_.get_gateway_url(gw_url, error))
+    if (!api_->get_gateway_url(gw_url, error))
         return false;
 
     gateway_ = std::make_unique<discord::Gateway>(access_token, gw_url);
@@ -169,9 +175,12 @@ bool DiscordApp::init(std::string& error) {
 
     {
         std::string me_err;
-        have_me_ = api_.get_current_user(me_, me_err);
+        have_me_ = api_->get_current_user(me_, me_err);
+        if (!have_me_ && refresh_api_token())
+            have_me_ = api_->get_current_user(me_, me_err);
         if (!have_me_) {
-            error = "Discord API: " + me_err;
+            delete_saved_session();
+            error = "Login expired — delete auth.json was done; restart and scan QR again.";
             return false;
         }
     }
@@ -225,9 +234,8 @@ bool DiscordApp::refresh_api_token() {
         dirty_ = true;
         return false;
     }
-    if (user_session_.access_token != before) {
-        api_ = discord::Api(user_session_.access_token);
-    }
+    if (user_session_.access_token != before && api_)
+        api_->update_token(user_session_.access_token);
     return true;
 }
 
@@ -348,7 +356,7 @@ void DiscordApp::set_tab(SidebarTab tab) {
 void DiscordApp::load_guilds() {
     std::vector<discord::Guild> fetched;
     std::string err;
-    if (!api_.get_user_guilds(fetched, err)) {
+    if (!api_ || !api_->get_user_guilds(fetched, err)) {
         status_line_ = err;
         return;
     }
@@ -358,6 +366,7 @@ void DiscordApp::load_guilds() {
         discord::ReadyGuild rg;
         rg.id = g.id;
         rg.name = g.name;
+        rg.icon = g.icon;
         guilds_.push_back(std::move(rg));
     }
     if (guilds_.empty())
@@ -369,7 +378,7 @@ void DiscordApp::load_guilds() {
 
 void DiscordApp::load_dm_channels() {
     std::string err;
-    if (!api_.get_dm_channels(channels_, err)) {
+    if (!api_ || !api_->get_dm_channels(channels_, err)) {
         status_line_ = err;
         return;
     }
@@ -386,7 +395,7 @@ void DiscordApp::load_dm_channels() {
 
 void DiscordApp::load_friends() {
     std::string err;
-    if (!api_.get_relationships(friends_, err)) {
+    if (!api_ || !api_->get_relationships(friends_, err)) {
         status_line_ = err;
         return;
     }
@@ -399,7 +408,7 @@ void DiscordApp::select_friend(size_t index) {
     selected_friend_ = std::min(index, friends_.size() - 1);
     discord::Channel dm;
     std::string err;
-    if (!api_.open_dm_channel(friends_[selected_friend_].user_id, dm, err)) {
+    if (!api_ || !api_->open_dm_channel(friends_[selected_friend_].user_id, dm, err)) {
         status_line_ = err;
         return;
     }
@@ -420,7 +429,7 @@ void DiscordApp::poll_messages() {
 
     std::vector<discord::Message> latest;
     std::string err;
-    if (!api_.get_channel_messages(active_channel_id_, 10, latest, err))
+    if (!api_ || !api_->get_channel_messages(active_channel_id_, 10, latest, err))
         return;
 
     if (latest.empty())
@@ -448,8 +457,11 @@ void DiscordApp::shutdown() {
     if (shutdown_done_)
         return;
     shutdown_done_ = true;
-    if (gateway_)
+    if (gateway_) {
         gateway_->stop();
+        gateway_.reset();
+    }
+    api_.reset();
     if (controller_) {
         SDL_GameControllerClose(controller_);
         controller_ = nullptr;
@@ -485,7 +497,7 @@ void DiscordApp::select_guild(size_t index) {
     selected_guild_ = std::min(index, guilds_.size() - 1);
     std::string err;
     channels_.clear();
-    if (!api_.get_guild_channels(guilds_[selected_guild_].id, channels_, err)) {
+    if (!api_ || !api_->get_guild_channels(guilds_[selected_guild_].id, channels_, err)) {
         status_line_ = err;
         return;
     }
@@ -532,7 +544,7 @@ void DiscordApp::refresh_messages() {
         return;
     std::string err;
     std::vector<discord::Message> fetched;
-    if (!api_.get_channel_messages(active_channel_id_, 50, fetched, err)) {
+    if (!api_ || !api_->get_channel_messages(active_channel_id_, 50, fetched, err)) {
         status_line_ = err;
         return;
     }
@@ -595,7 +607,7 @@ void DiscordApp::handle_input(const SDL_Event& ev) {
             if (open_compose_keyboard(text) && !active_channel_id_.empty()) {
                 discord::Message sent;
                 std::string err;
-                if (api_.send_message(active_channel_id_, text, sent, err))
+                if (api_ && api_->send_message(active_channel_id_, text, sent, err))
                     append_message(sent);
                 else
                     status_line_ = err;
@@ -640,14 +652,23 @@ void DiscordApp::handle_input(const SDL_Event& ev) {
             }
             break;
         }
-        case 2: // X — prev server / select friend
-            if (tab_ == SidebarTab::Guild && !guilds_.empty() && selected_guild_ > 0)
-                select_guild(selected_guild_ - 1);
+        case 2: // X — previous server
+            if (!guilds_.empty()) {
+                tab_ = SidebarTab::Guild;
+                size_t g = selected_guild_;
+                if (g > 0)
+                    --g;
+                select_guild(g);
+            }
             break;
-        case 3: // Y — tab / next
-            if (tab_ == SidebarTab::Guild && !guilds_.empty() &&
-                selected_guild_ + 1 < guilds_.size())
-                select_guild(selected_guild_ + 1);
+        case 3: // Y — next server
+            if (!guilds_.empty()) {
+                tab_ = SidebarTab::Guild;
+                size_t g = selected_guild_;
+                if (g + 1 < guilds_.size())
+                    ++g;
+                select_guild(g);
+            }
             break;
         case 9: // Minus — cycle DM / Friends / Guild
             if (tab_ == SidebarTab::DirectMessages)

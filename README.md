@@ -24,7 +24,7 @@ Folder: `switch/switchcord/`
 ```ini
 client_id=YOUR_ID
 redirect_uri=https://stimpydev.github.io/switch-discord/oauth-relay.html
-oauth_scopes=identify guilds
+oauth_scopes=identify guilds dm_channels.read
 ```
 
 Sign in: scan QR on Switch, approve on phone (same Wi‑Fi).
@@ -36,7 +36,7 @@ Sign in: scan QR on Switch, approve on phone (same Wi‑Fi).
 | **−** | DMs / Friends / Servers |
 | **L / R** | List |
 | **A** | Open DM or send message |
-| **X / Y** | Previous / next server |
+| **X / Y** | Previous / next server (from any tab) |
 | **+** | Quit |
 
 ## Build

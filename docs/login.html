@@ -17,7 +17,7 @@
       const q = new URLSearchParams(location.search);
       const ip = (q.get("ip") || "").trim();
       const clientId = (q.get("client_id") || q.get("c") || "").trim();
-      const SCOPES = (q.get("scope") || "identify guilds").trim();
+      const SCOPES = (q.get("scope") || "identify guilds dm_channels.read").trim();
       const msg = document.getElementById("msg");
 
       if (!ip || !/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {

@@ -5,6 +5,7 @@
 #include <curl/curl.h>
 #include <jansson.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -33,12 +34,17 @@ public:
     bool open_dm_channel(const std::string& user_id, Channel& out, std::string& error);
     bool get_current_user(User& out, std::string& error);
 
+    void update_token(std::string bearer_token);
+    using TokenRefresher = std::function<bool(std::string& new_token, std::string& error)>;
+    void set_token_refresher(TokenRefresher refresher);
+
 private:
     std::string token_;
     std::string auth_header_;
     std::string ua_header_;
     CURL* curl_ = nullptr;
     struct curl_slist* headers_ = nullptr;
+    TokenRefresher token_refresher_;
 
     void rebuild_headers();
     bool request(const std::string& method, const std::string& path,

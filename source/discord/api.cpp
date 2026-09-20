@@ -113,6 +113,15 @@ Api::Api(std::string token) : token_(trim_copy(token)) {
     curl_easy_setopt(curl_, CURLOPT_CONNECTTIMEOUT, 15L);
 }
 
+void Api::update_token(std::string bearer_token) {
+    token_ = trim_copy(std::move(bearer_token));
+    rebuild_headers();
+}
+
+void Api::set_token_refresher(TokenRefresher refresher) {
+    token_refresher_ = std::move(refresher);
+}
+
 void Api::rebuild_headers() {
     auth_header_ = "Authorization: Bearer " + token_;
     ua_header_ = std::string("User-Agent: Switchcord/") + SWITCHCORD_VERSION;
@@ -167,7 +176,7 @@ bool Api::request(const std::string& method, const std::string& path,
         return false;
     }
 
-    for (int attempt = 0; attempt < 2; ++attempt) {
+    for (int attempt = 0; attempt < 3; ++attempt) {
         std::string url = "https://discord.com/api/v10" + path;
         response.clear();
         curl_easy_setopt(curl_, CURLOPT_URL, url.c_str());
@@ -186,9 +195,17 @@ bool Api::request(const std::string& method, const std::string& path,
         }
 
         curl_easy_getinfo(curl_, CURLINFO_RESPONSE_CODE, &http_code);
-        if (http_code == 429 && attempt == 0) {
+        if (http_code == 429 && attempt < 2) {
             svcSleepThread(1'500'000'000LL);
             continue;
+        }
+        if (http_code == 401 && attempt < 2 && token_refresher_) {
+            std::string new_token;
+            std::string refresh_err;
+            if (token_refresher_(new_token, refresh_err) && !new_token.empty()) {
+                update_token(new_token);
+                continue;
+            }
         }
         break;
     }
@@ -318,6 +335,7 @@ bool Api::get_user_guilds(std::vector<Guild>& out, std::string& error) {
         Guild guild;
         guild.id = field_as_string(g, "id");
         guild.name = field_as_string(g, "name");
+        guild.icon = field_as_string(g, "icon");
         out.push_back(std::move(guild));
     }
     json_decref(root);

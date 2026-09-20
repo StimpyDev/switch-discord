@@ -35,6 +35,8 @@ public:
 
 private:
     std::string token_;
+    std::string auth_header_;
+    std::string ua_header_;
     CURL* curl_ = nullptr;
     struct curl_slist* headers_ = nullptr;
 

@@ -18,18 +18,41 @@ size_t write_cb(char* ptr, size_t size, size_t nmemb, void* userdata) {
     return size * nmemb;
 }
 
+std::string trim_copy(const std::string& s) {
+    size_t a = 0;
+    while (a < s.size() && (s[a] == ' ' || s[a] == '\t' || s[a] == '\r' || s[a] == '\n'))
+        ++a;
+    size_t b = s.size();
+    while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\r' || s[b - 1] == '\n'))
+        --b;
+    return s.substr(a, b - a);
+}
+
 std::string field_as_string(json_t* obj, const char* key) {
     json_t* v = json_object_get(obj, key);
-    if (!v || !json_is_string(v))
+    if (!v)
         return {};
-    return json_string_value(v);
+    if (json_is_string(v))
+        return json_string_value(v);
+    if (json_is_integer(v))
+        return std::to_string(json_integer_value(v));
+    return {};
 }
 
 int field_as_int(json_t* obj, const char* key) {
     json_t* v = json_object_get(obj, key);
-    if (!v || !json_is_integer(v))
+    if (!v)
         return 0;
-    return static_cast<int>(json_integer_value(v));
+    if (json_is_integer(v))
+        return static_cast<int>(json_integer_value(v));
+    if (json_is_string(v)) {
+        try {
+            return std::stoi(json_string_value(v));
+        } catch (...) {
+            return 0;
+        }
+    }
+    return 0;
 }
 
 std::string display_name_for_user(const User& u) {
@@ -77,7 +100,7 @@ Channel parse_channel(json_t* obj) {
     return c;
 }
 
-Api::Api(std::string token) : token_(std::move(token)) {
+Api::Api(std::string token) : token_(trim_copy(token)) {
     curl_ = curl_easy_init();
     if (!curl_)
         return;
@@ -91,12 +114,13 @@ Api::Api(std::string token) : token_(std::move(token)) {
 }
 
 void Api::rebuild_headers() {
+    auth_header_ = "Authorization: Bearer " + token_;
+    ua_header_ = std::string("User-Agent: SwitchDiscord/") + SWITCHDISCORD_VERSION + " (libnx)";
     if (headers_)
         curl_slist_free_all(headers_);
     headers_ = curl_slist_append(nullptr, "Content-Type: application/json");
-    headers_ = curl_slist_append(headers_, ("Authorization: Bearer " + token_).c_str());
-    std::string ua = std::string("SwitchDiscord/") + SWITCHDISCORD_VERSION + " (libnx)";
-    headers_ = curl_slist_append(headers_, ("User-Agent: " + ua).c_str());
+    headers_ = curl_slist_append(headers_, auth_header_.c_str());
+    headers_ = curl_slist_append(headers_, ua_header_.c_str());
     if (curl_)
         curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, headers_);
 }
@@ -109,8 +133,8 @@ Api::~Api() {
 }
 
 Api::Api(Api&& other) noexcept
-    : token_(std::move(other.token_)), curl_(other.curl_),
-      headers_(other.headers_) {
+    : token_(std::move(other.token_)), auth_header_(std::move(other.auth_header_)),
+      ua_header_(std::move(other.ua_header_)), curl_(other.curl_), headers_(other.headers_) {
     other.curl_ = nullptr;
     other.headers_ = nullptr;
 }
@@ -123,10 +147,14 @@ Api& Api::operator=(Api&& other) noexcept {
     if (curl_)
         curl_easy_cleanup(curl_);
     token_ = std::move(other.token_);
+    auth_header_ = std::move(other.auth_header_);
+    ua_header_ = std::move(other.ua_header_);
     curl_ = other.curl_;
     headers_ = other.headers_;
     other.curl_ = nullptr;
     other.headers_ = nullptr;
+    if (curl_)
+        curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, headers_);
     return *this;
 }
 
@@ -315,11 +343,13 @@ bool Api::get_dm_channels(std::vector<Channel>& out, std::string& error) {
     for (size_t i = 0; i < n; ++i) {
         json_t* ch = json_array_get(root, i);
         Channel c = parse_channel(ch);
-        if (c.type != 1 && c.type != 3)
+        json_t* recipients = json_object_get(ch, "recipients");
+        const bool has_recipients =
+            recipients && json_is_array(recipients) && json_array_size(recipients) > 0;
+        if (c.type != 1 && c.type != 3 && !has_recipients)
             continue;
         if (c.name.empty()) {
-            json_t* recipients = json_object_get(ch, "recipients");
-            if (recipients && json_is_array(recipients) && json_array_size(recipients) > 0) {
+            if (has_recipients) {
                 User u = parse_user(json_array_get(recipients, 0));
                 c.dm_label = display_name_for_user(u);
                 c.name = c.dm_label;

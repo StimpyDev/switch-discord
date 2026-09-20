@@ -200,6 +200,16 @@ bool accept_oauth_code(int server_fd, std::string& code_out, std::string& code_v
     return true;
 }
 
+std::string trim_copy(const std::string& s) {
+    size_t a = 0;
+    while (a < s.size() && (s[a] == ' ' || s[a] == '\t' || s[a] == '\r' || s[a] == '\n'))
+        ++a;
+    size_t b = s.size();
+    while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\r' || s[b - 1] == '\n'))
+        --b;
+    return s.substr(a, b - a);
+}
+
 bool token_request(const AppConfig& config, const std::string& body, UserSession& session,
                    std::string& error) {
     CURL* curl = curl_easy_init();
@@ -254,7 +264,7 @@ bool token_request(const AppConfig& config, const std::string& body, UserSession
         return false;
     }
 
-    session.access_token = json_string_value(access);
+    session.access_token = trim_copy(json_string_value(access));
     if (refresh && json_is_string(refresh))
         session.refresh_token = json_string_value(refresh);
 

@@ -169,12 +169,16 @@ bool DiscordApp::init(std::string& error) {
     {
         std::string me_err;
         have_me_ = api_.get_current_user(me_, me_err);
+        if (!have_me_) {
+            error = "Discord API: " + me_err;
+            return false;
+        }
     }
 
-    set_tab(SidebarTab::DirectMessages);
-    load_dm_channels();
-    load_friends();
     load_guilds();
+    load_friends();
+    load_dm_channels();
+    set_tab(SidebarTab::DirectMessages);
 
     if (!config_.guild_id.empty()) {
         tab_ = SidebarTab::Guild;
@@ -358,7 +362,10 @@ void DiscordApp::load_guilds() {
         rg.name = g.name;
         guilds_.push_back(std::move(rg));
     }
-    status_line_ = "Loaded " + std::to_string(guilds_.size()) + " server(s)";
+    if (guilds_.empty())
+        status_line_ = "0 servers — delete auth.json and log in again if wrong";
+    else
+        status_line_ = "Loaded " + std::to_string(guilds_.size()) + " server(s)";
     dirty_ = true;
 }
 
@@ -795,6 +802,10 @@ void DiscordApp::draw() {
     }
     ui::draw_text(renderer_, font_, truncate_line(chat_title, 40), title_x, 12,
                   theme::header_primary());
+    if (!status_line_.empty()) {
+        ui::draw_text(renderer_, font_tiny_, truncate_line(status_line_, 90), chat_x + 16,
+                      kHeaderH - 18, theme::text_muted());
+    }
 
     std::deque<discord::Message> copy;
     {

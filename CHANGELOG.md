@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- OAuth login screen shows a scannable QR code instead of a long URL
+
 ## 1.0.0 — Stable
 
 - Personal Discord login via OAuth2 (PKCE) and `auth.json` token storage

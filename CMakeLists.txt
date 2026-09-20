@@ -18,6 +18,7 @@ pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 pkg_check_modules(SDL2_TTF REQUIRED IMPORTED_TARGET SDL2_ttf)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS source/*.cpp)
+list(APPEND SOURCES vendor/qrcodegen.cpp)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE source vendor)
@@ -34,5 +35,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 set(NRO_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icon.jpg")
 set(NRO_NACP "${CMAKE_CURRENT_BINARY_DIR}/switchdiscord.nacp")
-nx_generate_nacp(OUTPUT "${NRO_NACP}" NAME "Discord" AUTHOR "SwitchDiscord" VERSION "1.0.0")
+nx_generate_nacp(OUTPUT "${NRO_NACP}" NAME "Discord" AUTHOR "SwitchDiscord" VERSION "1.0.1")
 nx_create_nro(${PROJECT_NAME} ICON "${NRO_ICON}" NACP "${NRO_NACP}")

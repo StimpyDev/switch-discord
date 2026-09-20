@@ -1,5 +1,6 @@
 #include "ui/app.hpp"
 
+#include "ui/qrcode_draw.hpp"
 #include "ui/theme.hpp"
 
 #include <switch.h>
@@ -238,7 +239,7 @@ bool DiscordApp::run_oauth_ui(OAuthPending& pending, std::string& error) {
             break;
         }
 
-        draw_login(pending, "Open URL on phone (Discord login). Waiting for callback...");
+        draw_login(pending, "Scan the QR code with your phone. Waiting for login...");
         SDL_Delay(16);
 
         if (SDL_GetTicks() - start > 300000) {
@@ -254,13 +255,40 @@ bool DiscordApp::run_oauth_ui(OAuthPending& pending, std::string& error) {
 }
 
 void DiscordApp::draw_login(const OAuthPending& pending, const std::string& hint) {
+    static std::string cached_url;
+    static ui::QrBitmap cached_qr;
+
+    if (pending.authorize_url != cached_url) {
+        cached_url = pending.authorize_url;
+        ui::qr_encode(cached_url, cached_qr);
+    }
+
     fill_rect(renderer_, {0, 0, 1280, 720}, theme::bg());
     draw_text(renderer_, font_, "Discord login", 40, 40, theme::text_primary());
-    draw_text(renderer_, font_small_, hint, 40, 90, theme::text_muted());
-    draw_text(renderer_, font_small_, pending.authorize_url, 40, 140, theme::accent());
+    draw_text(renderer_, font_small_, hint, 40, 88, theme::text_muted());
+    draw_text(renderer_, font_small_, "Phone and Switch must be on the same Wi-Fi.",
+              40, 118, theme::text_muted());
+
+    if (cached_qr.modules > 0) {
+        const int max_px = 400;
+        int pixel = max_px / (cached_qr.modules + 8);
+        if (pixel < 4)
+            pixel = 4;
+        const int drawn = (cached_qr.modules + 8) * pixel;
+        const int qx = (1280 - drawn) / 2 + 4 * pixel;
+        const int qy = 160;
+        ui::qr_draw(renderer_, qx, qy, pixel, cached_qr, theme::text_primary(),
+                    {255, 255, 255, 255});
+    } else {
+        draw_text(renderer_, font_small_, "Could not build QR (URL too long?)",
+                  40, 200, theme::accent());
+        draw_text(renderer_, font_small_, truncate_line(pending.authorize_url, 120), 40, 240,
+                  theme::text_muted());
+    }
+
     draw_text(renderer_, font_small_,
-              "Host docs/oauth-relay.html and set redirect_uri in Discord app + config.ini",
-              40, 420, theme::text_muted());
+              "If scan fails: open the OAuth redirect from Discord on your phone.",
+              40, 580, theme::text_muted());
     draw_text(renderer_, font_small_, "+ : cancel", 40, 660, theme::text_muted());
     SDL_RenderPresent(renderer_);
 }

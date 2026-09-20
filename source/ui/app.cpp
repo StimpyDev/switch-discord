@@ -1,11 +1,13 @@
 #include "ui/app.hpp"
 
+#include "ui/primitives.hpp"
 #include "ui/qrcode_draw.hpp"
 #include "ui/theme.hpp"
 
 #include <switch.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <sstream>
 
@@ -27,33 +29,14 @@ namespace {
 
 constexpr int kServerRail = 72;
 constexpr int kChannelPanel = 240;
-constexpr int kStatusBar = 28;
-constexpr int kComposeBar = 44;
+constexpr int kHeaderH = 48;
+constexpr int kUserBarH = 52;
+constexpr int kInputH = 68;
+constexpr int kServerIcon = 48;
 constexpr size_t kMaxMessages = 120;
 
-void set_color(SDL_Renderer* r, SDL_Color c) {
-    SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
-}
-
-void fill_rect(SDL_Renderer* r, SDL_Rect rect, SDL_Color c) {
-    set_color(r, c);
-    SDL_RenderFillRect(r, &rect);
-}
-
-void draw_text(SDL_Renderer* r, TTF_Font* font, const std::string& text, int x, int y,
-               SDL_Color color) {
-    if (!font || text.empty())
-        return;
-    SDL_Surface* surf = TTF_RenderUTF8_Blended_Wrapped(font, text.c_str(), color, 900);
-    if (!surf)
-        return;
-    SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-    if (tex) {
-        SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderCopy(r, tex, nullptr, &dst);
-        SDL_DestroyTexture(tex);
-    }
-    SDL_FreeSurface(surf);
+bool is_text_channel(const discord::Channel& c) {
+    return c.type == 0;
 }
 
 std::string display_name(const discord::User& u) {
@@ -66,6 +49,39 @@ std::string truncate_line(const std::string& s, size_t max_len) {
     if (s.size() <= max_len)
         return s;
     return s.substr(0, max_len - 3) + "...";
+}
+
+std::string message_time(const std::string& ts) {
+    if (ts.size() >= 16)
+        return ts.substr(11, 5);
+    return {};
+}
+
+void draw_avatar(SDL_Renderer* r, TTF_Font* font, int cx, int cy, int radius,
+                 const std::string& name) {
+    ui::fill_circle(r, cx, cy, radius, ui::avatar_color(name));
+    ui::draw_text(r, font, ui::avatar_initial(name), cx - radius / 2, cy - radius / 2 + 2,
+                  theme::header_primary());
+}
+
+void draw_server_rail_icon(SDL_Renderer* r, TTF_Font* font, int y, bool active, bool home,
+                           const std::string& letter) {
+    const int cx = kServerRail / 2;
+    const int cy = y + kServerIcon / 2;
+    if (active) {
+        ui::fill_rounded(r, {0, cy - 10, 4, 20}, 2, theme::pill());
+    }
+    if (home) {
+        ui::fill_rounded(r, {cx - kServerIcon / 2, y, kServerIcon, kServerIcon}, 24,
+                         active ? theme::brand() : theme::brand_hover());
+        ui::fill_rounded(r, {cx - 10, y + 14, 20, 20}, 10, theme::header_primary());
+    } else {
+        ui::fill_rounded(r, {cx - kServerIcon / 2, y, kServerIcon, kServerIcon}, 16,
+                         theme::server_icon_bg());
+        if (!letter.empty()) {
+            ui::draw_text(r, font, letter, cx - 6, y + 14, theme::header_primary());
+        }
+    }
 }
 
 } // namespace
@@ -82,9 +98,10 @@ bool DiscordApp::load_font(std::string& error) {
         "sdmc:/switch/switchdiscord/font.ttf",
     };
     for (const char* path : paths) {
-        font_ = TTF_OpenFont(path, 22);
+        font_ = TTF_OpenFont(path, 20);
         font_small_ = TTF_OpenFont(path, 16);
-        if (font_ && font_small_)
+        font_tiny_ = TTF_OpenFont(path, 13);
+        if (font_ && font_small_ && font_tiny_)
             return true;
         if (font_) {
             TTF_CloseFont(font_);
@@ -93,6 +110,10 @@ bool DiscordApp::load_font(std::string& error) {
         if (font_small_) {
             TTF_CloseFont(font_small_);
             font_small_ = nullptr;
+        }
+        if (font_tiny_) {
+            TTF_CloseFont(font_tiny_);
+            font_tiny_ = nullptr;
         }
     }
     error = "Place DejaVuSans.ttf at sdmc:/switch/switchdiscord/DejaVuSans.ttf";
@@ -144,6 +165,11 @@ bool DiscordApp::init(std::string& error) {
 
     gateway_ = std::make_unique<discord::Gateway>(access_token, gw_url);
     gateway_->start();
+
+    {
+        std::string me_err;
+        have_me_ = api_.get_current_user(me_, me_err);
+    }
 
     set_tab(SidebarTab::DirectMessages);
     load_dm_channels();
@@ -263,33 +289,29 @@ void DiscordApp::draw_login(const OAuthPending& pending, const std::string& hint
         ui::qr_encode(cached_url, cached_qr);
     }
 
-    fill_rect(renderer_, {0, 0, 1280, 720}, theme::bg());
-    draw_text(renderer_, font_, "Discord login", 40, 40, theme::text_primary());
-    draw_text(renderer_, font_small_, hint, 40, 88, theme::text_muted());
-    draw_text(renderer_, font_small_, "Phone and Switch must be on the same Wi-Fi.",
-              40, 118, theme::text_muted());
+    ui::fill_rect(renderer_, {0, 0, 1280, 720}, theme::bg_primary());
+    ui::fill_rounded(renderer_, {340, 80, 600, 560}, 8, theme::bg_secondary());
+    ui::fill_hline(renderer_, 340, 128, 600, theme::divider());
+
+    ui::draw_text(renderer_, font_, "Log in to Discord", 368, 96, theme::header_primary());
+    ui::draw_text(renderer_, font_small_, hint, 368, 148, theme::text_muted());
+    ui::draw_text(renderer_, font_tiny_, "Use the same Wi-Fi on your phone and Switch.",
+                  368, 176, theme::text_muted());
 
     if (cached_qr.modules > 0) {
-        const int max_px = 400;
+        const int max_px = 320;
         int pixel = max_px / (cached_qr.modules + 8);
         if (pixel < 4)
             pixel = 4;
         const int drawn = (cached_qr.modules + 8) * pixel;
         const int qx = (1280 - drawn) / 2 + 4 * pixel;
-        const int qy = 160;
-        ui::qr_draw(renderer_, qx, qy, pixel, cached_qr, theme::text_primary(),
-                    {255, 255, 255, 255});
+        const int qy = 210;
+        ui::qr_draw(renderer_, qx, qy, pixel, cached_qr, {32, 34, 37, 255}, {255, 255, 255, 255});
     } else {
-        draw_text(renderer_, font_small_, "Could not build QR (URL too long?)",
-                  40, 200, theme::accent());
-        draw_text(renderer_, font_small_, truncate_line(pending.authorize_url, 120), 40, 240,
-                  theme::text_muted());
+        ui::draw_text(renderer_, font_small_, "QR could not be generated.", 368, 240, theme::brand());
     }
 
-    draw_text(renderer_, font_small_,
-              "If scan fails: open the OAuth redirect from Discord on your phone.",
-              40, 580, theme::text_muted());
-    draw_text(renderer_, font_small_, "+ : cancel", 40, 660, theme::text_muted());
+    ui::draw_text(renderer_, font_tiny_, "+ to cancel", 368, 600, theme::text_muted());
     SDL_RenderPresent(renderer_);
 }
 
@@ -303,7 +325,7 @@ void DiscordApp::set_tab(SidebarTab tab) {
         load_dm_channels();
     else if (tab_ == SidebarTab::Friends) {
         load_friends();
-        status_line_ = "Friends — A to open DM";
+        status_line_.clear();
     } else if (tab_ == SidebarTab::Guild && !guilds_.empty())
         select_guild(selected_guild_);
     else if (tab_ == SidebarTab::Guild)
@@ -369,7 +391,7 @@ void DiscordApp::select_friend(size_t index) {
     active_channel_id_ = dm.id;
     scroll_offset_ = 0;
     refresh_messages();
-    status_line_ = "@" + friends_[selected_friend_].display_name;
+    status_line_.clear();
     dirty_ = true;
 }
 
@@ -417,6 +439,10 @@ void DiscordApp::shutdown() {
         SDL_GameControllerClose(controller_);
         controller_ = nullptr;
     }
+    if (font_tiny_) {
+        TTF_CloseFont(font_tiny_);
+        font_tiny_ = nullptr;
+    }
     if (font_small_) {
         TTF_CloseFont(font_small_);
         font_small_ = nullptr;
@@ -453,17 +479,35 @@ void DiscordApp::select_guild(size_t index) {
                   return a.position < b.position;
               });
     selected_channel_ = 0;
-    if (!channels_.empty())
-        select_channel(0);
+    if (!channels_.empty()) {
+        for (size_t i = 0; i < channels_.size(); ++i) {
+            if (is_text_channel(channels_[i])) {
+                select_channel(i);
+                break;
+            }
+        }
+    }
     dirty_ = true;
 }
 
 void DiscordApp::select_channel(size_t index) {
     if (channels_.empty())
         return;
-    selected_channel_ = std::min(index, channels_.size() - 1);
+    index = std::min(index, channels_.size() - 1);
+    if (!is_text_channel(channels_[index])) {
+        for (size_t i = index; i < channels_.size(); ++i) {
+            if (is_text_channel(channels_[i])) {
+                index = i;
+                break;
+            }
+        }
+    }
+    if (!is_text_channel(channels_[index]))
+        return;
+    selected_channel_ = index;
     active_channel_id_ = channels_[selected_channel_].id;
     scroll_offset_ = 0;
+    status_line_.clear();
     refresh_messages();
     dirty_ = true;
 }
@@ -485,12 +529,6 @@ void DiscordApp::refresh_messages() {
             messages_.push_back(std::move(m));
         if (!messages_.empty())
             last_seen_message_id_ = messages_.back().id;
-    }
-    if (selected_channel_ < channels_.size()) {
-        if (tab_ == SidebarTab::DirectMessages)
-            status_line_ = "@" + channels_[selected_channel_].name;
-        else
-            status_line_ = "#" + channels_[selected_channel_].name;
     }
     dirty_ = true;
 }
@@ -558,19 +596,35 @@ void DiscordApp::handle_input(const SDL_Event& ev) {
             SDL_PushEvent(&quit);
             break;
         }
-        case 4: // L
+        case 4: { // L
             if (tab_ == SidebarTab::Friends && !friends_.empty() && selected_friend_ > 0)
                 select_friend(selected_friend_ - 1);
-            else if (!channels_.empty() && selected_channel_ > 0)
-                select_channel(selected_channel_ - 1);
+            else if (!channels_.empty()) {
+                size_t i = selected_channel_;
+                while (i > 0) {
+                    --i;
+                    if (is_text_channel(channels_[i])) {
+                        select_channel(i);
+                        break;
+                    }
+                }
+            }
             break;
-        case 5: // R
+        }
+        case 5: { // R
             if (tab_ == SidebarTab::Friends && !friends_.empty() &&
                 selected_friend_ + 1 < friends_.size())
                 select_friend(selected_friend_ + 1);
-            else if (!channels_.empty() && selected_channel_ + 1 < channels_.size())
-                select_channel(selected_channel_ + 1);
+            else if (!channels_.empty()) {
+                for (size_t i = selected_channel_ + 1; i < channels_.size(); ++i) {
+                    if (is_text_channel(channels_[i])) {
+                        select_channel(i);
+                        break;
+                    }
+                }
+            }
             break;
+        }
         case 2: // X — prev server / select friend
             if (tab_ == SidebarTab::Guild && !guilds_.empty() && selected_guild_ > 0)
                 select_guild(selected_guild_ - 1);
@@ -609,83 +663,175 @@ void DiscordApp::handle_input(const SDL_Event& ev) {
 }
 
 void DiscordApp::draw() {
-    fill_rect(renderer_, {0, 0, 1280, 720}, theme::bg());
+    const int chat_x = kServerRail + kChannelPanel;
+    const int chat_w = 1280 - chat_x;
+    const int list_h = 720 - kUserBarH;
 
-    fill_rect(renderer_, {0, 0, kServerRail, 720}, theme::sidebar());
-    fill_rect(renderer_, {kServerRail, 0, kChannelPanel, 720}, theme::panel());
+    ui::fill_rect(renderer_, {0, 0, 1280, 720}, theme::bg_primary());
+    ui::fill_rect(renderer_, {0, 0, kServerRail, 720}, theme::bg_tertiary());
+    ui::fill_rect(renderer_, {kServerRail, 0, kChannelPanel, list_h}, theme::bg_secondary());
+    ui::fill_rect(renderer_, {kServerRail, list_h, kChannelPanel, kUserBarH}, theme::bg_floating());
+    ui::fill_rect(renderer_, {chat_x, 0, chat_w, kHeaderH}, theme::bg_secondary());
+    ui::fill_rect(renderer_, {chat_x, kHeaderH, chat_w, 720 - kHeaderH - kInputH}, theme::bg_primary());
 
-    int chat_x = kServerRail + kChannelPanel;
-    int chat_w = 1280 - chat_x;
-    fill_rect(renderer_, {chat_x, 0, chat_w, 720 - kComposeBar - kStatusBar}, theme::chat_bg());
-    fill_rect(renderer_, {chat_x, 720 - kComposeBar - kStatusBar, chat_w, kStatusBar}, theme::panel());
-    fill_rect(renderer_, {chat_x, 720 - kComposeBar, chat_w, kComposeBar}, theme::sidebar());
+    ui::fill_hline(renderer_, kServerRail, 0, kChannelPanel, theme::divider());
+    ui::fill_hline(renderer_, chat_x, kHeaderH, chat_w, theme::divider());
+    ui::fill_hline(renderer_, kServerRail, list_h, kChannelPanel, theme::divider());
 
-    int sy = 16;
-    auto draw_rail_btn = [&](const char* label, bool active) {
-        SDL_Rect icon{kServerRail / 2 - 24, sy, 48, 48};
-        fill_rect(renderer_, icon, active ? theme::accent() : theme::panel());
-        draw_text(renderer_, font_small_, label, icon.x + 16, icon.y + 14, theme::text_primary());
-        sy += 56;
-    };
-    draw_rail_btn("@", tab_ == SidebarTab::DirectMessages);
-    draw_rail_btn("F", tab_ == SidebarTab::Friends);
-    for (size_t i = 0; i < guilds_.size() && sy < 700; ++i) {
-        SDL_Rect icon{kServerRail / 2 - 24, sy, 48, 48};
+    int sy = 12;
+    draw_server_rail_icon(renderer_, font_small_, sy, tab_ == SidebarTab::DirectMessages, true, {});
+    sy += kServerIcon + 8;
+    draw_server_rail_icon(renderer_, font_small_, sy, tab_ == SidebarTab::Friends, false, "F");
+    sy += kServerIcon + 8;
+    ui::fill_hline(renderer_, 16, sy, 40, theme::divider());
+    sy += 8;
+
+    for (size_t i = 0; i < guilds_.size() && sy < 680; ++i) {
         bool active = tab_ == SidebarTab::Guild && i == selected_guild_;
-        fill_rect(renderer_, icon, active ? theme::accent() : theme::panel());
-        std::string label = guilds_[i].name.empty() ? "?" : std::string(1, guilds_[i].name[0]);
-        draw_text(renderer_, font_small_, label, icon.x + 16, icon.y + 14, theme::text_primary());
-        sy += 56;
+        std::string letter = guilds_[i].name.empty() ? "?" : std::string(1, guilds_[i].name[0]);
+        if (!letter.empty() && letter[0] >= 'a' && letter[0] <= 'z')
+            letter[0] = static_cast<char>(letter[0] - 32);
+        draw_server_rail_icon(renderer_, font_small_, sy, active, false, letter);
+        sy += kServerIcon + 8;
     }
 
-    int cy = 16;
+    const int panel_x = kServerRail;
+    std::string panel_title = "Direct Messages";
     if (tab_ == SidebarTab::Guild && !guilds_.empty())
-        draw_text(renderer_, font_, guilds_[selected_guild_].name, kServerRail + 16, cy,
-                  theme::text_primary());
-    else if (tab_ == SidebarTab::DirectMessages)
-        draw_text(renderer_, font_, "Direct Messages", kServerRail + 16, cy, theme::text_primary());
+        panel_title = guilds_[selected_guild_].name;
     else if (tab_ == SidebarTab::Friends)
-        draw_text(renderer_, font_, "Friends", kServerRail + 16, cy, theme::text_primary());
-    cy += 36;
+        panel_title = "Friends";
+
+    ui::draw_text(renderer_, font_, truncate_line(panel_title, 22), panel_x + 16, 14,
+                  theme::header_primary());
+    ui::fill_hline(renderer_, panel_x, kHeaderH - 1, kChannelPanel, theme::divider());
+
+    int cy = kHeaderH + 8;
+    const int row_h = 34;
 
     if (tab_ == SidebarTab::Friends) {
-        for (size_t i = 0; i < friends_.size() && cy < 680; ++i) {
-            SDL_Color col = (i == selected_friend_) ? theme::text_primary() : theme::text_muted();
-            draw_text(renderer_, font_small_, friends_[i].display_name, kServerRail + 16, cy, col);
-            cy += 28;
+        for (size_t i = 0; i < friends_.size() && cy < list_h - 8; ++i) {
+            const bool sel = i == selected_friend_;
+            if (sel)
+                ui::fill_rounded(renderer_, {panel_x + 8, cy, kChannelPanel - 16, row_h - 2}, 4,
+                                 theme::bg_selected());
+            draw_avatar(renderer_, font_tiny_, panel_x + 28, cy + row_h / 2, 14,
+                        friends_[i].display_name);
+            SDL_Color col = sel ? theme::text_normal() : theme::text_muted();
+            ui::draw_text(renderer_, font_small_, friends_[i].display_name, panel_x + 48, cy + 8,
+                          col);
+            cy += row_h;
         }
     } else {
-        for (size_t i = 0; i < channels_.size() && cy < 680; ++i) {
-            SDL_Color col = (i == selected_channel_) ? theme::text_primary() : theme::text_muted();
-            std::string prefix = (tab_ == SidebarTab::DirectMessages) ? "" : "# ";
-            draw_text(renderer_, font_small_, prefix + channels_[i].name, kServerRail + 16, cy, col);
-            cy += 28;
+        for (size_t i = 0; i < channels_.size() && cy < list_h - 8; ++i) {
+            const auto& ch = channels_[i];
+            if (ch.type == 4) {
+                std::string cat = ch.name;
+                for (char& c : cat)
+                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                ui::draw_text(renderer_, font_tiny_, cat, panel_x + 16, cy + 4, theme::text_muted());
+                cy += 26;
+                continue;
+            }
+            if (!is_text_channel(ch))
+                continue;
+
+            const bool sel = i == selected_channel_;
+            if (sel)
+                ui::fill_rounded(renderer_, {panel_x + 8, cy, kChannelPanel - 16, row_h - 2}, 4,
+                                 theme::bg_selected());
+
+            int tx = panel_x + 16;
+            if (tab_ == SidebarTab::DirectMessages) {
+                draw_avatar(renderer_, font_tiny_, panel_x + 28, cy + row_h / 2, 14, ch.name);
+                tx = panel_x + 48;
+            } else {
+                ui::draw_text(renderer_, font_tiny_, "#", tx, cy + 8, theme::text_channel_icon());
+                tx += 18;
+            }
+            SDL_Color col = sel ? theme::text_normal() : theme::text_muted();
+            ui::draw_text(renderer_, font_small_, truncate_line(ch.name, 24), tx, cy + 8, col);
+            cy += row_h;
         }
     }
 
-    // Messages
-    int my = 12;
+    std::string me_name = have_me_ ? display_name(me_) : "User";
+    const int me_cy = list_h + kUserBarH / 2;
+    draw_avatar(renderer_, font_tiny_, panel_x + 28, me_cy, 16, me_name);
+    ui::fill_circle(renderer_, panel_x + 38, me_cy + 10, 6, theme::bg_floating());
+    ui::fill_circle(renderer_, panel_x + 38, me_cy + 10, 4, theme::online());
+    ui::draw_text(renderer_, font_small_, truncate_line(me_name, 16), panel_x + 50, list_h + 10,
+                  theme::header_primary());
+    ui::draw_text(renderer_, font_tiny_, "Online", panel_x + 50, list_h + 30, theme::text_muted());
+
+    std::string chat_title;
+    bool chat_is_dm = tab_ == SidebarTab::DirectMessages || tab_ == SidebarTab::Friends;
+    if (tab_ == SidebarTab::Friends && !friends_.empty() && !active_channel_id_.empty())
+        chat_title = friends_[selected_friend_].display_name;
+    else if (!channels_.empty() && selected_channel_ < channels_.size() &&
+             is_text_channel(channels_[selected_channel_]))
+        chat_title = channels_[selected_channel_].name;
+    else if (tab_ == SidebarTab::DirectMessages)
+        chat_title = "Direct Messages";
+    else if (tab_ == SidebarTab::Friends)
+        chat_title = "Friends";
+    else
+        chat_title = panel_title;
+
+    int title_x = chat_x + 16;
+    if (!chat_is_dm && tab_ == SidebarTab::Guild) {
+        ui::draw_text(renderer_, font_, "#", title_x, 12, theme::text_channel_icon());
+        title_x += 22;
+    }
+    ui::draw_text(renderer_, font_, truncate_line(chat_title, 40), title_x, 12,
+                  theme::header_primary());
+
     std::deque<discord::Message> copy;
     {
         std::lock_guard<std::mutex> lock(msg_mu_);
         copy = messages_;
     }
-    int visible_start = std::max(0, static_cast<int>(copy.size()) - 12 - scroll_offset_);
-    for (int i = visible_start; i < static_cast<int>(copy.size()) && my < 720 - kComposeBar - kStatusBar - 40; ++i) {
+
+    const int msg_top = kHeaderH + 16;
+    const int msg_bottom = 720 - kInputH - 12;
+    int my = msg_top;
+    int visible_start = std::max(0, static_cast<int>(copy.size()) - 10 - scroll_offset_);
+    std::string last_author;
+    for (int i = visible_start; i < static_cast<int>(copy.size()) && my < msg_bottom; ++i) {
         const auto& m = copy[static_cast<size_t>(i)];
-        std::string header = display_name(m.author);
-        draw_text(renderer_, font_small_, header, chat_x + 16, my, theme::accent());
-        my += 20;
-        draw_text(renderer_, font_small_, truncate_line(m.content, 500), chat_x + 16, my,
-                  theme::text_primary());
-        my += 36;
+        const std::string author = display_name(m.author);
+        const bool grouped = author == last_author;
+        last_author = author;
+
+        if (!grouped) {
+            draw_avatar(renderer_, font_tiny_, chat_x + 36, my + 18, 18, author);
+            ui::draw_text(renderer_, font_small_, author, chat_x + 68, my, theme::header_primary());
+            std::string ts = message_time(m.timestamp);
+            if (!ts.empty())
+                ui::draw_text(renderer_, font_tiny_, ts, chat_x + 68 + static_cast<int>(author.size()) * 9,
+                              my + 2, theme::text_muted());
+            my += 26;
+        } else {
+            my += 4;
+        }
+
+        ui::draw_text(renderer_, font_small_, truncate_line(m.content, 500), chat_x + 68, my,
+                      theme::text_normal(), chat_w - 84);
+        my += grouped ? 22 : 28;
     }
 
-    draw_text(renderer_, font_small_, status_line_, chat_x + 12, 720 - kComposeBar - kStatusBar + 6,
-              theme::text_muted());
-    draw_text(renderer_, font_small_,
-              "-: Tab  A: Send  L/R: List  X/Y: Server  +: Quit", chat_x + 12,
-              720 - kComposeBar + 12, theme::text_muted());
+    std::string placeholder = "Message";
+    if (!chat_title.empty() && tab_ == SidebarTab::Guild)
+        placeholder += " #" + chat_title;
+    else if (!chat_title.empty() && chat_is_dm)
+        placeholder += " @" + chat_title;
+    if (!status_line_.empty())
+        placeholder = truncate_line(status_line_, 80);
+
+    ui::fill_rounded(renderer_, {chat_x + 16, 720 - kInputH + 12, chat_w - 32, 44}, 8,
+                     theme::bg_input());
+    ui::draw_text(renderer_, font_small_, placeholder, chat_x + 28, 720 - kInputH + 24,
+                  status_line_.empty() ? theme::text_muted() : theme::text_normal());
 
     SDL_RenderPresent(renderer_);
 }

@@ -60,6 +60,10 @@ private:
     SDL_Renderer* renderer_ = nullptr;
     TTF_Font* font_ = nullptr;
     TTF_Font* font_small_ = nullptr;
+    TTF_Font* font_tiny_ = nullptr;
+
+    discord::User me_;
+    bool have_me_ = false;
 
     SidebarTab tab_ = SidebarTab::Guild;
     std::vector<discord::ReadyGuild> guilds_;

@@ -31,6 +31,7 @@ public:
     bool get_dm_channels(std::vector<Channel>& out, std::string& error);
     bool get_relationships(std::vector<FriendEntry>& out, std::string& error);
     bool open_dm_channel(const std::string& user_id, Channel& out, std::string& error);
+    bool get_current_user(User& out, std::string& error);
 
 private:
     std::string token_;

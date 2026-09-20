@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- UI aligned with Discord desktop dark theme (server rail, channel list, chat header, message input, user bar)
+
 ## 1.0.1
 
 - OAuth login screen shows a scannable QR code instead of a long URL

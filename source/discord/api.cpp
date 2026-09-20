@@ -251,6 +251,22 @@ bool Api::send_message(const std::string& channel_id, const std::string& content
     return true;
 }
 
+bool Api::get_current_user(User& out, std::string& error) {
+    long code = 0;
+    std::string body;
+    if (!request("GET", "/users/@me", "", code, body, error))
+        return false;
+    json_error_t jerr{};
+    json_t* root = json_loads(body.c_str(), 0, &jerr);
+    if (!root) {
+        error = jerr.text;
+        return false;
+    }
+    out = parse_user(root);
+    json_decref(root);
+    return true;
+}
+
 bool Api::get_user_guilds(std::vector<Guild>& out, std::string& error) {
     long code = 0;
     std::string body;
@@ -406,7 +422,7 @@ bool Api::get_guild_channels(const std::string& guild_id, std::vector<Channel>& 
     size_t n = json_array_size(root);
     for (size_t i = 0; i < n; ++i) {
         Channel c = parse_channel(json_array_get(root, i));
-        if (c.type == 0 || c.type == 5)
+        if (c.type == 0 || c.type == 4 || c.type == 5)
             out.push_back(std::move(c));
     }
     json_decref(root);

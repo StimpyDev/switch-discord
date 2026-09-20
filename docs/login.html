@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SwitchDiscord — Sign in</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #313338; color: #dbdee1; padding: 24px; text-align: center; }
+    .err { color: #f23f43; }
+  </style>
+</head>
+<body>
+  <p id="msg">Redirecting to Discord…</p>
+  <script>
+    (function () {
+      const REDIRECT_URI = "https://stimpydev.github.io/switch-discord/oauth-relay.html";
+      const SCOPES = "identify guilds messages.read relationships.read";
+      const q = new URLSearchParams(location.search);
+      const ip = (q.get("ip") || "").trim();
+      const clientId = (q.get("client_id") || q.get("c") || "").trim();
+      const msg = document.getElementById("msg");
+
+      if (!ip || !/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+        msg.innerHTML = "<span class=\"err\">Missing Switch IP. Scan the QR on your Switch.</span>";
+        return;
+      }
+      if (!clientId) {
+        msg.innerHTML = "<span class=\"err\">Missing client_id. Check config.ini on your SD card.</span>";
+        return;
+      }
+
+      function randomVerifier(len) {
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+        const arr = new Uint8Array(len);
+        crypto.getRandomValues(arr);
+        let s = "";
+        for (let i = 0; i < len; i++) s += chars[arr[i] % chars.length];
+        return s;
+      }
+
+      async function pkceChallenge(verifier) {
+        const data = new TextEncoder().encode(verifier);
+        const hash = await crypto.subtle.digest("SHA-256", data);
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(hash)))
+          .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        return b64;
+      }
+
+      (async function () {
+        const verifier = randomVerifier(64);
+        const challenge = await pkceChallenge(verifier);
+        sessionStorage.setItem("sd_oauth_verifier", verifier);
+        sessionStorage.setItem("sd_oauth_ip", ip);
+        const state = ip + ":8765";
+        const params = new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: REDIRECT_URI,
+          response_type: "code",
+          scope: SCOPES,
+          state: state,
+          code_challenge: challenge,
+          code_challenge_method: "S256",
+          prompt: "consent"
+        });
+        location.href = "https://discord.com/oauth2/authorize?" + params.toString();
+      })().catch(function (e) {
+        msg.innerHTML = "<span class=\"err\">" + e + "</span>";
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -260,8 +260,11 @@ bool DiscordApp::run_oauth_ui(OAuthPending& pending, std::string& error) {
             }
         }
 
-        if (oauth_wait_code(pending, code, error)) {
+        std::string phone_verifier;
+        if (oauth_wait_code(pending, code, phone_verifier, error)) {
             waiting = false;
+            if (!phone_verifier.empty())
+                pending.code_verifier = phone_verifier;
             break;
         }
 
@@ -295,14 +298,14 @@ void DiscordApp::draw_login(const OAuthPending& pending, const std::string& hint
 
     ui::draw_text(renderer_, font_, "Log in to Discord", 368, 96, theme::header_primary());
     ui::draw_text(renderer_, font_small_, hint, 368, 148, theme::text_muted());
-    ui::draw_text(renderer_, font_tiny_, "Use the same Wi-Fi on your phone and Switch.",
-                  368, 176, theme::text_muted());
+    ui::draw_text(renderer_, font_tiny_, "Use the same Wi-Fi on your phone and Switch.", 368, 168,
+                  theme::text_muted());
+    ui::draw_text(renderer_, font_tiny_,
+                  "QR: login page, then Discord. Do not open oauth-relay yourself.", 368, 188,
+                  theme::text_muted());
     if (!pending.switch_ip.empty()) {
-        ui::draw_text(renderer_, font_small_, "Switch IP: " + pending.switch_ip, 368, 200,
+        ui::draw_text(renderer_, font_small_, "Switch IP: " + pending.switch_ip, 368, 212,
                       theme::header_primary());
-        ui::draw_text(renderer_, font_tiny_,
-                      "If the phone page asks for IP, type this address.", 368, 224,
-                      theme::text_muted());
     }
 
     if (cached_qr.modules > 0) {

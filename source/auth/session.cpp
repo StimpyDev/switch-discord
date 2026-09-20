@@ -148,7 +148,8 @@ std::string parse_query_param(const std::string& query, const char* key) {
     return url_decode(query.substr(pos, end - pos));
 }
 
-bool accept_oauth_code(int server_fd, std::string& code_out, std::string& error) {
+bool accept_oauth_code(int server_fd, std::string& code_out, std::string& code_verifier_out,
+                       std::string& error) {
     fd_set fds;
     FD_ZERO(&fds);
     FD_SET(server_fd, &fds);
@@ -165,7 +166,7 @@ bool accept_oauth_code(int server_fd, std::string& code_out, std::string& error)
     if (client_fd < 0)
         return false;
 
-    char buf[4096];
+    char buf[16384];
     ssize_t n = recv(client_fd, buf, sizeof(buf) - 1, 0);
     if (n <= 0) {
         close(client_fd);
@@ -184,6 +185,7 @@ bool accept_oauth_code(int server_fd, std::string& code_out, std::string& error)
     size_t qm = path.find('?');
     std::string query = qm == std::string::npos ? "" : path.substr(qm + 1);
     code_out = parse_query_param(query, "code");
+    code_verifier_out = parse_query_param(query, "code_verifier");
 
     const char* resp =
         "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
@@ -302,10 +304,22 @@ bool save_user_session(const UserSession& session) {
     return true;
 }
 
+std::string build_oauth_login_page_url(const AppConfig& config, const std::string& ip) {
+    std::string base = config.redirect_uri;
+    const size_t slash = base.rfind('/');
+    if (slash != std::string::npos)
+        base = base.substr(0, slash + 1) + "login.html";
+    else
+        base = "https://stimpydev.github.io/switch-discord/login.html";
+    std::ostringstream oss;
+    oss << base << "?ip=" << url_encode(ip) << "&client_id=" << url_encode(config.client_id);
+    return oss.str();
+}
+
 std::string build_authorize_url(const AppConfig& config, const std::string& code_challenge,
                                 const std::string& state) {
     std::ostringstream oss;
-    oss << "https://discord.com/api/oauth2/authorize"
+    oss << "https://discord.com/oauth2/authorize"
         << "?client_id=" << url_encode(config.client_id)
         << "&redirect_uri=" << url_encode(config.redirect_uri)
         << "&response_type=code"
@@ -354,11 +368,8 @@ bool oauth_begin(const AppConfig& config, OAuthPending& pending, std::string& er
         return false;
 
     pending.code_verifier = random_verifier(64);
-    std::string challenge = pkce_challenge(pending.code_verifier);
-    // State must not contain '&' — browsers/Discord treat it as a new query param.
     pending.switch_ip = ip;
-    std::string state = ip + ":" + std::to_string(kCallbackPort);
-    pending.authorize_url = build_authorize_url(config, challenge, state);
+    pending.authorize_url = build_oauth_login_page_url(config, ip);
 
     pending.listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (pending.listen_fd < 0) {
@@ -393,13 +404,15 @@ void oauth_cancel(OAuthPending& pending) {
     }
 }
 
-bool oauth_wait_code(OAuthPending& pending, std::string& code, std::string& error) {
+bool oauth_wait_code(OAuthPending& pending, std::string& code, std::string& code_verifier_out,
+                     std::string& error) {
     if (pending.listen_fd < 0) {
         error = "OAuth listener not started";
         return false;
     }
     error.clear();
-    if (!accept_oauth_code(pending.listen_fd, code, error))
+    code_verifier_out.clear();
+    if (!accept_oauth_code(pending.listen_fd, code, code_verifier_out, error))
         return false;
     oauth_cancel(pending);
     return true;

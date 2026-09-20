@@ -5,38 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SwitchDiscord OAuth relay</title>
   <style>
-    body { font-family: system-ui, sans-serif; background: #313338; color: #dbdee1; padding: 24px; max-width: 480px; margin: 0 auto; }
+    body { font-family: system-ui, sans-serif; background: #313338; color: #dbdee1; padding: 24px; max-width: 520px; margin: 0 auto; }
     input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 4px; border: none; background: #383a40; color: #f2f3f5; box-sizing: border-box; }
     button { background: #5865f2; color: #fff; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer; font-size: 16px; }
     .err { color: #f23f43; }
     .hint { color: #949ba4; font-size: 14px; }
+    code { font-size: 12px; word-break: break-all; }
   </style>
 </head>
 <body>
-  <p id="status">Redirecting to your Switch…</p>
+  <p id="status">Finishing login…</p>
+  <p id="debug" class="hint" hidden></p>
   <div id="manual" hidden>
-    <p class="hint">Login code received, but Switch IP was missing. Enter the IP shown on your Switch login screen:</p>
-    <input id="ip" type="text" inputmode="decimal" placeholder="192.168.1.42" autocomplete="off" />
-    <button type="button" id="go">Continue</button>
+    <p class="hint">Enter the Switch IP from the login screen:</p>
+    <input id="ip" type="text" inputmode="decimal" placeholder="192.168.1.42" />
+    <button type="button" id="go">Send code to Switch</button>
   </div>
   <script>
     (function () {
       const q = new URLSearchParams(location.search);
+      const status = document.getElementById("status");
+      const debug = document.getElementById("debug");
+      const manual = document.getElementById("manual");
       const err = q.get("error");
       const code = q.get("code");
-      const status = document.getElementById("status");
-      const manual = document.getElementById("manual");
+
+      debug.hidden = false;
+      debug.innerHTML = "URL: <code>" + location.pathname + location.search.replace(/code=[^&]+/, "code=…") + "</code>";
 
       if (err) {
         status.innerHTML = "<span class=\"err\">Discord: " + err + "</span>";
         return;
       }
       if (!code) {
-        status.innerHTML = "<span class=\"err\">No login code in URL.</span><p class=\"hint\">Scan the QR on your Switch (do not open this page directly).</p>";
+        status.innerHTML = "<span class=\"err\">No login code from Discord.</span>";
+        status.innerHTML += "<p class=\"hint\">Scan the QR on your Switch (starts with login.html). Do not bookmark this page.</p>";
         return;
       }
 
-      function parseTarget(stateRaw, topPort) {
+      const verifier = sessionStorage.getItem("sd_oauth_verifier") || "";
+      let ip = sessionStorage.getItem("sd_oauth_ip") || "";
+
+      function parseState(stateRaw, topPort) {
         const state = (stateRaw || "").trim();
         if (!state) return null;
         if (/^\d+\.\d+\.\d+\.\d+$/.test(state))
@@ -44,34 +54,40 @@
         const colon = state.indexOf(":");
         if (colon > 0 && /^\d+\.\d+\.\d+\.\d+$/.test(state.slice(0, colon)))
           return { ip: state.slice(0, colon), port: state.slice(colon + 1) || "8765" };
-        try {
-          const p = new URLSearchParams(state);
-          const ip = p.get("ip");
-          if (ip) return { ip: ip, port: p.get("port") || topPort || "8765" };
-        } catch (e) {}
         return null;
       }
 
-      const target = parseTarget(q.get("state"), q.get("port"));
+      const st = parseState(q.get("state"), q.get("port"));
+      if (st && st.ip) ip = st.ip;
 
-      function redirect(ip, port) {
-        location.href = "http://" + ip + ":" + port + "/callback?code=" + encodeURIComponent(code);
+      function sendToSwitch(switchIp, port) {
+        if (!verifier) {
+          status.innerHTML = "<span class=\"err\">Missing PKCE session. Scan the QR again from Switch (do not refresh).</span>";
+          manual.hidden = false;
+          return;
+        }
+        const p = new URLSearchParams({
+          code: code,
+          code_verifier: verifier
+        });
+        status.textContent = "Opening Switch… allow local network if asked.";
+        location.href = "http://" + switchIp + ":" + port + "/callback?" + p.toString();
       }
 
-      if (target && target.ip) {
-        redirect(target.ip, target.port);
+      if (ip && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+        sendToSwitch(ip, "8765");
         return;
       }
 
-      status.textContent = "Almost there…";
+      status.textContent = "Need Switch IP";
       manual.hidden = false;
       document.getElementById("go").onclick = function () {
-        const ip = document.getElementById("ip").value.trim();
-        if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
-          status.innerHTML = "<span class=\"err\">Enter a valid IPv4 address.</span>";
+        const switchIp = document.getElementById("ip").value.trim();
+        if (!/^\d+\.\d+\.\d+\.\d+$/.test(switchIp)) {
+          status.innerHTML = "<span class=\"err\">Invalid IP</span>";
           return;
         }
-        redirect(ip, "8765");
+        sendToSwitch(switchIp, "8765");
       };
     })();
   </script>

@@ -21,7 +21,7 @@ Unofficial Discord **text** client for Nintendo Switch (homebrew `.nro`). Sign i
 
 1. [Discord Developer Application](https://discord.com/developers/applications) → OAuth2
 2. Enable **GitHub Pages** on this repo: Settings → Pages → branch **main**, folder **`/docs`**. OAuth redirect URL:
-   `https://stimpydev.github.io/switch-discord/docs/oauth-relay.html` (Discord app + `config.ini`)
+   `https://stimpydev.github.io/switch-discord/oauth-relay.html` (Discord app + `config.ini`; Pages folder **`/docs`**, no extra `/docs/` in the URL)
 3. First launch: scan the **QR code** on Switch with your phone, approve login
 4. Phone + Switch on the **same Wi‑Fi**
 

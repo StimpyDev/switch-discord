@@ -1,0 +1,9 @@
+build/
+*.nro
+*.nacp
+*.elf
+*.lst
+*.map
+.vscode/
+config.ini
+auth.json

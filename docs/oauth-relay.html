@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SwitchDiscord OAuth relay</title>
+</head>
+<body>
+  <p>Redirecting to your Switch…</p>
+  <script>
+    (function () {
+      const q = new URLSearchParams(location.search);
+      const code = q.get("code");
+      const state = q.get("state") || "";
+      const p = new URLSearchParams(state);
+      const ip = p.get("ip");
+      const port = p.get("port") || "8765";
+      if (!code || !ip) {
+        document.body.textContent = "Missing code or state (ip= in state). Check Discord redirect URL.";
+        return;
+      }
+      location.href = "http://" + ip + ":" + port + "/callback?code=" + encodeURIComponent(code);
+    })();
+  </script>
+</body>
+</html>

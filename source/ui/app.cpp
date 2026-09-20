@@ -95,10 +95,8 @@ DiscordApp::~DiscordApp() {
 
 bool DiscordApp::load_font(std::string& error) {
     const std::string font_paths[] = {
-        paths::pick("DejaVuSans.ttf"),
-        paths::pick("font.ttf"),
-        std::string(paths::kLegacyDir) + "DejaVuSans.ttf",
-        std::string(paths::kLegacyDir) + "font.ttf",
+        paths::install_path("DejaVuSans.ttf"),
+        paths::install_path("font.ttf"),
     };
     for (const std::string& path : font_paths) {
         font_ = TTF_OpenFont(path.c_str(), 20);

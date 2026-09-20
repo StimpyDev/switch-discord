@@ -35,5 +35,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 set(NRO_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icon.jpg")
 set(NRO_NACP "${CMAKE_CURRENT_BINARY_DIR}/switchcord.nacp")
-nx_generate_nacp(OUTPUT "${NRO_NACP}" NAME "Switchcord" AUTHOR "StimpyDev" VERSION "1.0.0")
+nx_generate_nacp(OUTPUT "${NRO_NACP}" NAME "Switchcord" AUTHOR "StimpyDev" VERSION "1.0.1")
 nx_create_nro(${PROJECT_NAME} ICON "${NRO_ICON}" NACP "${NRO_NACP}")

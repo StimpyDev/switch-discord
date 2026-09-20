@@ -47,7 +47,7 @@ bool load_config(AppConfig& out, std::string& error) {
     const std::string path = paths::config_ini();
     FILE* f = fopen(path.c_str(), "r");
     if (!f) {
-        error = "Missing config.ini in switch/switchcord/ (or legacy switchdiscord/)";
+        error = "Missing config.ini in switch/switchcord/";
         return false;
     }
 

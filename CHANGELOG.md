@@ -6,8 +6,11 @@
 - Fixed API auth header bug (empty servers/DMs after login)
 - OAuth via QR → `login.html`, scopes `identify guilds`
 - Discord-style UI, token refresh, rate-limit retry
-- Legacy path `switch/switchdiscord/` still supported (config, font, auth, old `.nro` name)
 - Cleaner login copy on Switch and OAuth relay pages
+
+## 1.0.1
+
+- Removed legacy `switch/switchdiscord/` install path (use `switch/switchcord/` only)
 
 ## Pre-release history
 

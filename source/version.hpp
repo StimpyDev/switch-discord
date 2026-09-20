@@ -1,3 +1,3 @@
 #pragma once
 
-#define SWITCHCORD_VERSION "1.0.0"
+#define SWITCHCORD_VERSION "1.0.1"

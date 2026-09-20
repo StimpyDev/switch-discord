@@ -1,10 +1,10 @@
-# Switchcord 1.0.0
+# Switchcord 1.0.1
 
 Unofficial Discord text client for Nintendo Switch (homebrew). Not made or endorsed by Discord.
 
 ## SD card setup
 
-Folder: `switch/switchcord/` (still reads `switch/switchdiscord/` if you already use that)
+Folder: `switch/switchcord/`
 
 | File | Notes |
 |------|--------|

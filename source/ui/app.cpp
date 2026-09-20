@@ -1,5 +1,6 @@
 #include "ui/app.hpp"
 
+#include "paths.hpp"
 #include "ui/primitives.hpp"
 #include "ui/qrcode_draw.hpp"
 #include "ui/theme.hpp"
@@ -93,14 +94,16 @@ DiscordApp::~DiscordApp() {
 }
 
 bool DiscordApp::load_font(std::string& error) {
-    const char* paths[] = {
-        "sdmc:/switch/switchdiscord/DejaVuSans.ttf",
-        "sdmc:/switch/switchdiscord/font.ttf",
+    const std::string font_paths[] = {
+        paths::pick("DejaVuSans.ttf"),
+        paths::pick("font.ttf"),
+        std::string(paths::kLegacyDir) + "DejaVuSans.ttf",
+        std::string(paths::kLegacyDir) + "font.ttf",
     };
-    for (const char* path : paths) {
-        font_ = TTF_OpenFont(path, 20);
-        font_small_ = TTF_OpenFont(path, 16);
-        font_tiny_ = TTF_OpenFont(path, 13);
+    for (const std::string& path : font_paths) {
+        font_ = TTF_OpenFont(path.c_str(), 20);
+        font_small_ = TTF_OpenFont(path.c_str(), 16);
+        font_tiny_ = TTF_OpenFont(path.c_str(), 13);
         if (font_ && font_small_ && font_tiny_)
             return true;
         if (font_) {
@@ -116,7 +119,7 @@ bool DiscordApp::load_font(std::string& error) {
             font_tiny_ = nullptr;
         }
     }
-    error = "Place DejaVuSans.ttf at sdmc:/switch/switchdiscord/DejaVuSans.ttf";
+    error = "Missing DejaVuSans.ttf in switch/switchcord/";
     return false;
 }
 
@@ -139,7 +142,7 @@ bool DiscordApp::init(std::string& error) {
     if (!load_font(error))
         return false;
 
-    window_ = SDL_CreateWindow("SwitchDiscord", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    window_ = SDL_CreateWindow("Switchcord", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                1280, 720, SDL_WINDOW_SHOWN);
     if (!window_) {
         error = SDL_GetError();
@@ -272,12 +275,12 @@ bool DiscordApp::run_oauth_ui(OAuthPending& pending, std::string& error) {
             break;
         }
 
-        draw_login(pending, "Scan the QR code with your phone. Waiting for login...");
+        draw_login(pending, "Scan QR, approve in Discord.");
         SDL_Delay(16);
 
         if (SDL_GetTicks() - start > 300000) {
             oauth_cancel(pending);
-            error = "OAuth timeout (5 min)";
+            error = "Sign-in timed out";
             return false;
         }
     }
@@ -300,15 +303,12 @@ void DiscordApp::draw_login(const OAuthPending& pending, const std::string& hint
     ui::fill_rounded(renderer_, {340, 80, 600, 560}, 8, theme::bg_secondary());
     ui::fill_hline(renderer_, 340, 128, 600, theme::divider());
 
-    ui::draw_text(renderer_, font_, "Log in to Discord", 368, 96, theme::header_primary());
+    ui::draw_text(renderer_, font_, "Switchcord", 368, 96, theme::header_primary());
     ui::draw_text(renderer_, font_small_, hint, 368, 148, theme::text_muted());
-    ui::draw_text(renderer_, font_tiny_, "Use the same Wi-Fi on your phone and Switch.", 368, 168,
-                  theme::text_muted());
-    ui::draw_text(renderer_, font_tiny_,
-                  "QR: login page, then Discord. Do not open oauth-relay yourself.", 368, 188,
+    ui::draw_text(renderer_, font_tiny_, "Phone on the same Wi-Fi as the Switch.", 368, 172,
                   theme::text_muted());
     if (!pending.switch_ip.empty()) {
-        ui::draw_text(renderer_, font_small_, "Switch IP: " + pending.switch_ip, 368, 212,
+        ui::draw_text(renderer_, font_small_, "IP: " + pending.switch_ip, 368, 198,
                       theme::header_primary());
     }
 
@@ -322,7 +322,7 @@ void DiscordApp::draw_login(const OAuthPending& pending, const std::string& hint
         const int qy = 250;
         ui::qr_draw(renderer_, qx, qy, pixel, cached_qr, {32, 34, 37, 255}, {255, 255, 255, 255});
     } else {
-        ui::draw_text(renderer_, font_small_, "QR could not be generated.", 368, 240, theme::brand());
+        ui::draw_text(renderer_, font_small_, "Could not build QR.", 368, 240, theme::brand());
     }
 
     ui::draw_text(renderer_, font_tiny_, "+ to cancel", 368, 600, theme::text_muted());
@@ -363,9 +363,9 @@ void DiscordApp::load_guilds() {
         guilds_.push_back(std::move(rg));
     }
     if (guilds_.empty())
-        status_line_ = "0 servers — delete auth.json and log in again if wrong";
+        status_line_ = "No servers — delete auth.json and log in again.";
     else
-        status_line_ = "Loaded " + std::to_string(guilds_.size()) + " server(s)";
+        status_line_.clear();
     dirty_ = true;
 }
 
@@ -377,11 +377,11 @@ void DiscordApp::load_dm_channels() {
     }
     if (channels_.empty()) {
         clear_chat_view();
-        status_line_ = "No direct messages";
+        status_line_ = "No DMs";
     } else {
         selected_channel_ = 0;
         select_channel(0);
-        status_line_ = "Direct messages";
+        status_line_.clear();
     }
     dirty_ = true;
 }
@@ -779,7 +779,7 @@ void DiscordApp::draw() {
     ui::fill_circle(renderer_, panel_x + 38, me_cy + 10, 4, theme::online());
     ui::draw_text(renderer_, font_small_, truncate_line(me_name, 16), panel_x + 50, list_h + 10,
                   theme::header_primary());
-    ui::draw_text(renderer_, font_tiny_, "Online", panel_x + 50, list_h + 30, theme::text_muted());
+    ui::draw_text(renderer_, font_tiny_, "online", panel_x + 50, list_h + 30, theme::text_muted());
 
     std::string chat_title;
     bool chat_is_dm = tab_ == SidebarTab::DirectMessages || tab_ == SidebarTab::Friends;

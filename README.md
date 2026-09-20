@@ -1,58 +1,60 @@
-# SwitchDiscord 1.0.0
+# Switchcord 1.0.0
 
-Unofficial Discord **text** client for Nintendo Switch (homebrew `.nro`). Sign in with **your Discord account** (OAuth2). Not affiliated with Discord — use at your own risk.
+Unofficial Discord text client for Nintendo Switch (homebrew). Not made or endorsed by Discord.
 
-## Features
+## SD card setup
 
-- Direct messages, friends (open DM), servers & text channels
-- Message history + polling (~3s) for new messages
-- Token refresh via `auth.json` on SD card
-- Discord-style dark UI, custom homebrew icon
+Folder: `switch/switchcord/` (still reads `switch/switchdiscord/` if you already use that)
 
-## Requirements
+| File | Notes |
+|------|--------|
+| `switchcord.nro` | From `build/switchcord.nro` |
+| `config.ini` | Copy from `config.example.ini` |
+| `DejaVuSans.ttf` | Required font |
 
-- Modded Switch (Atmosphere or compatible CFW), Wi‑Fi
-- `sdmc:/switch/switchdiscord/`:
-  - `switchdiscord.nro`
-  - `config.ini` (`client_id`, `redirect_uri`)
-  - `DejaVuSans.ttf` (or `font.ttf`)
+## Discord app (one-time)
 
-## OAuth setup (one time)
+1. [Developer Portal](https://discord.com/developers/applications) → OAuth2 → copy **Client ID**
+2. Redirect URL (must match `config.ini` exactly):
 
-1. [Discord Developer Application](https://discord.com/developers/applications) → OAuth2
-2. Enable **GitHub Pages** on this repo: Settings → Pages → branch **main**, folder **`/docs`**. OAuth redirect URL:
-   `https://stimpydev.github.io/switch-discord/oauth-relay.html` (Discord app + `config.ini`; Pages folder **`/docs`**, no extra `/docs/` in the URL)
-3. First launch: scan the **QR code** on Switch with your phone, approve login
-4. Phone + Switch on the **same Wi‑Fi**
+   `https://stimpydev.github.io/switch-discord/oauth-relay.html`
 
-See `config.example.ini` for all options.
+3. GitHub Pages on this repo: branch **main**, folder **`/docs`**
+
+```ini
+client_id=YOUR_ID
+redirect_uri=https://stimpydev.github.io/switch-discord/oauth-relay.html
+oauth_scopes=identify guilds
+```
+
+Sign in: scan QR on Switch, approve on phone (same Wi‑Fi).
 
 ## Controls
 
-| Button | Action |
-|--------|--------|
-| **-** | Cycle DM / Friends / Guild |
-| **A** | Open friend DM, or send message |
-| **L / R** | Previous / next in list |
-| **X / Y** | Previous / next server (guild tab) |
-| **D-pad** | Scroll chat |
+| Button | |
+|--------|---|
+| **−** | DMs / Friends / Servers |
+| **L / R** | List |
+| **A** | Open DM or send message |
+| **X / Y** | Previous / next server |
 | **+** | Quit |
 
-## Build (devkitPro)
+## Build
+
+MSYS2 + devkitPro:
 
 ```bash
 source /etc/profile.d/devkit-env.sh
-cd switch-discord/build && cmake .. -G "Unix Makefiles" && make -j8
+cd switch-discord/build
+cmake .. -G "Unix Makefiles" && make -j8
 ```
 
-Output: `build/switchdiscord.nro`
+Output: `build/switchcord.nro`
 
-## Known limits
+## Limits
 
-- No voice; no live Gateway yet (polling only)
-- Default OAuth scopes: `identify guilds` (`messages.read` / `relationships.read` are restricted and cause `invalid_scope` for most apps)
-- Unofficial client — account risk
+- Text only, message polling (~3s)
+- Friends list needs scopes Discord does not give most apps
+- Unofficial client — use at your own risk
 
-## License
-
-MIT — Discord is a trademark of Discord Inc.
+MIT license. Discord is a trademark of Discord Inc.

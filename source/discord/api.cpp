@@ -115,7 +115,7 @@ Api::Api(std::string token) : token_(trim_copy(token)) {
 
 void Api::rebuild_headers() {
     auth_header_ = "Authorization: Bearer " + token_;
-    ua_header_ = std::string("User-Agent: SwitchDiscord/") + SWITCHDISCORD_VERSION + " (libnx)";
+    ua_header_ = std::string("User-Agent: Switchcord/") + SWITCHCORD_VERSION;
     if (headers_)
         curl_slist_free_all(headers_);
     headers_ = curl_slist_append(nullptr, "Content-Type: application/json");
@@ -137,6 +137,8 @@ Api::Api(Api&& other) noexcept
       ua_header_(std::move(other.ua_header_)), curl_(other.curl_), headers_(other.headers_) {
     other.curl_ = nullptr;
     other.headers_ = nullptr;
+    if (curl_)
+        curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, headers_);
 }
 
 Api& Api::operator=(Api&& other) noexcept {
@@ -153,8 +155,7 @@ Api& Api::operator=(Api&& other) noexcept {
     headers_ = other.headers_;
     other.curl_ = nullptr;
     other.headers_ = nullptr;
-    if (curl_)
-        curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, headers_);
+    rebuild_headers();
     return *this;
 }
 

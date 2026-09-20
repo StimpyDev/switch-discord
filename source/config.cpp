@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "paths.hpp"
 
 #include <cstdio>
 #include <string>
@@ -43,10 +44,10 @@ bool parse_line(const std::string& line, AppConfig& cfg) {
 } // namespace
 
 bool load_config(AppConfig& out, std::string& error) {
-    const char* path = "sdmc:/switch/switchdiscord/config.ini";
-    FILE* f = fopen(path, "r");
+    const std::string path = paths::config_ini();
+    FILE* f = fopen(path.c_str(), "r");
     if (!f) {
-        error = "Missing config at sdmc:/switch/switchdiscord/config.ini";
+        error = "Missing config.ini in switch/switchcord/ (or legacy switchdiscord/)";
         return false;
     }
 

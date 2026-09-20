@@ -1,22 +1,14 @@
 # Changelog
 
-## 1.0.2
+## 1.0.0 — Switchcord (stable)
 
-- UI aligned with Discord desktop dark theme (server rail, channel list, chat header, message input, user bar)
+- Renamed from SwitchDiscord to **Switchcord** (`switchcord.nro`, install folder `switch/switchcord/`)
+- Fixed API auth header bug (empty servers/DMs after login)
+- OAuth via QR → `login.html`, scopes `identify guilds`
+- Discord-style UI, token refresh, rate-limit retry
+- Legacy path `switch/switchdiscord/` still supported (config, font, auth, old `.nro` name)
+- Cleaner login copy on Switch and OAuth relay pages
 
-## 1.0.1
+## Pre-release history
 
-- OAuth login screen shows a scannable QR code instead of a long URL
-
-## 1.0.0 — Stable
-
-- Personal Discord login via OAuth2 (PKCE) and `auth.json` token storage
-- DM list, friends list, server channels, text chat with polling (~3s)
-- Automatic access-token refresh (session + periodic check)
-- Rate-limit retry (HTTP 429), curl timeouts, shorter API error text
-- UI fixes: tab switching, friends → DM → compose flow, guild tab reload bug
-- Discord homebrew icon and NACP title
-
-## 0.2.x — Beta
-
-- Initial Switch homebrew client, bot mode (removed in 1.0)
+Earlier builds were published as SwitchDiscord 0.2.x–1.0.3 on the same repo.

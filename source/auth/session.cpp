@@ -1,5 +1,7 @@
 #include "auth/session.hpp"
 
+#include "paths.hpp"
+
 #include <curl/curl.h>
 #include <jansson.h>
 #include <switch.h>
@@ -20,7 +22,6 @@
 
 namespace {
 
-constexpr const char* kAuthPath = "sdmc:/switch/switchdiscord/auth.json";
 constexpr int kCallbackPort = 8765;
 
 size_t write_cb(char* ptr, size_t size, size_t nmemb, void* userdata) {
@@ -189,7 +190,7 @@ bool accept_oauth_code(int server_fd, std::string& code_out, std::string& code_v
 
     const char* resp =
         "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
-        "<html><body><h2>Login OK</h2><p>Return to your Switch.</p></body></html>";
+        "<html><body><p>OK — back to Switch.</p></body></html>";
     send(client_fd, resp, strlen(resp), 0);
     close(client_fd);
 
@@ -285,7 +286,8 @@ bool token_request(const AppConfig& config, const std::string& body, UserSession
 
 bool load_user_session(UserSession& out) {
     json_error_t jerr{};
-    json_t* root = json_load_file(kAuthPath, 0, &jerr);
+    const std::string auth_path = paths::auth_json();
+    json_t* root = json_load_file(auth_path.c_str(), 0, &jerr);
     if (!root)
         return false;
     json_t* a = json_object_get(root, "access_token");
@@ -306,7 +308,8 @@ bool save_user_session(const UserSession& session) {
     json_object_set_new(root, "access_token", json_string(session.access_token.c_str()));
     json_object_set_new(root, "refresh_token", json_string(session.refresh_token.c_str()));
     json_object_set_new(root, "expires_at", json_integer(session.expires_at));
-    if (json_dump_file(root, kAuthPath, JSON_INDENT(2)) != 0) {
+    const std::string save_path = paths::auth_json_save_path();
+    if (json_dump_file(root, save_path.c_str(), JSON_INDENT(2)) != 0) {
         json_decref(root);
         return false;
     }

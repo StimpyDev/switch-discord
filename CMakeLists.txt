@@ -6,7 +6,7 @@ endif()
 
 include($ENV{DEVKITPRO}/cmake/Switch.cmake)
 
-project(switchdiscord CXX)
+project(switchcord CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +34,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 set(NRO_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icon.jpg")
-set(NRO_NACP "${CMAKE_CURRENT_BINARY_DIR}/switchdiscord.nacp")
-nx_generate_nacp(OUTPUT "${NRO_NACP}" NAME "Discord" AUTHOR "SwitchDiscord" VERSION "1.0.3")
+set(NRO_NACP "${CMAKE_CURRENT_BINARY_DIR}/switchcord.nacp")
+nx_generate_nacp(OUTPUT "${NRO_NACP}" NAME "Switchcord" AUTHOR "StimpyDev" VERSION "1.0.0")
 nx_create_nro(${PROJECT_NAME} ICON "${NRO_ICON}" NACP "${NRO_NACP}")

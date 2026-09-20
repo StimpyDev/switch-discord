@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SwitchDiscord OAuth relay</title>
+  <title>Switchcord login</title>
   <style>
     body { font-family: system-ui, sans-serif; background: #313338; color: #dbdee1; padding: 24px; max-width: 520px; margin: 0 auto; }
     input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 4px; border: none; background: #383a40; color: #f2f3f5; box-sizing: border-box; }
@@ -15,7 +15,6 @@
 </head>
 <body>
   <p id="status">Finishing login…</p>
-  <p id="debug" class="hint" hidden></p>
   <div id="manual" hidden>
     <p class="hint">Enter the Switch IP from the login screen:</p>
     <input id="ip" type="text" inputmode="decimal" placeholder="192.168.1.42" />
@@ -25,13 +24,9 @@
     (function () {
       const q = new URLSearchParams(location.search);
       const status = document.getElementById("status");
-      const debug = document.getElementById("debug");
       const manual = document.getElementById("manual");
       const err = q.get("error");
       const code = q.get("code");
-
-      debug.hidden = false;
-      debug.innerHTML = "URL: <code>" + location.pathname + location.search.replace(/code=[^&]+/, "code=…") + "</code>";
 
       if (err) {
         status.innerHTML = "<span class=\"err\">Discord: " + err + "</span>";
@@ -39,7 +34,7 @@
       }
       if (!code) {
         status.innerHTML = "<span class=\"err\">No login code from Discord.</span>";
-        status.innerHTML += "<p class=\"hint\">Scan the QR on your Switch (starts with login.html). Do not bookmark this page.</p>";
+        status.innerHTML += "<p class=\"hint\">Scan the QR on your Switch again.</p>";
         return;
       }
 
@@ -62,7 +57,7 @@
 
       function sendToSwitch(switchIp, port) {
         if (!verifier) {
-          status.innerHTML = "<span class=\"err\">Missing PKCE session. Scan the QR again from Switch (do not refresh).</span>";
+          status.innerHTML = "<span class=\"err\">Session expired. Scan the QR on your Switch again.</span>";
           manual.hidden = false;
           return;
         }
@@ -70,7 +65,7 @@
           code: code,
           code_verifier: verifier
         });
-        status.textContent = "Opening Switch… allow local network if asked.";
+        status.textContent = "Sending to Switch…";
         location.href = "http://" + switchIp + ":" + port + "/callback?" + p.toString();
       }
 

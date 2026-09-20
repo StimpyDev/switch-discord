@@ -50,7 +50,7 @@ Output: `build/switchdiscord.nro`
 ## Known limits
 
 - No voice; no live Gateway yet (polling only)
-- `messages.read` / `relationships.read` scopes must be allowed for your app
+- Default OAuth scopes: `identify guilds` (`messages.read` / `relationships.read` are restricted and cause `invalid_scope` for most apps)
 - Unofficial client — account risk
 
 ## License

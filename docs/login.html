@@ -14,10 +14,10 @@
   <script>
     (function () {
       const REDIRECT_URI = "https://stimpydev.github.io/switch-discord/oauth-relay.html";
-      const SCOPES = "identify guilds messages.read relationships.read";
       const q = new URLSearchParams(location.search);
       const ip = (q.get("ip") || "").trim();
       const clientId = (q.get("client_id") || q.get("c") || "").trim();
+      const SCOPES = (q.get("scope") || "identify guilds").trim();
       const msg = document.getElementById("msg");
 
       if (!ip || !/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {

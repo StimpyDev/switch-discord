@@ -312,7 +312,8 @@ std::string build_oauth_login_page_url(const AppConfig& config, const std::strin
     else
         base = "https://stimpydev.github.io/switch-discord/login.html";
     std::ostringstream oss;
-    oss << base << "?ip=" << url_encode(ip) << "&client_id=" << url_encode(config.client_id);
+    oss << base << "?ip=" << url_encode(ip) << "&client_id=" << url_encode(config.client_id)
+        << "&scope=" << url_encode(config.oauth_scopes);
     return oss.str();
 }
 

@@ -2,23 +2,77 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SwitchDiscord OAuth relay</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #313338; color: #dbdee1; padding: 24px; max-width: 480px; margin: 0 auto; }
+    input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 4px; border: none; background: #383a40; color: #f2f3f5; box-sizing: border-box; }
+    button { background: #5865f2; color: #fff; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer; font-size: 16px; }
+    .err { color: #f23f43; }
+    .hint { color: #949ba4; font-size: 14px; }
+  </style>
 </head>
 <body>
-  <p>Redirecting to your Switch…</p>
+  <p id="status">Redirecting to your Switch…</p>
+  <div id="manual" hidden>
+    <p class="hint">Login code received, but Switch IP was missing. Enter the IP shown on your Switch login screen:</p>
+    <input id="ip" type="text" inputmode="decimal" placeholder="192.168.1.42" autocomplete="off" />
+    <button type="button" id="go">Continue</button>
+  </div>
   <script>
     (function () {
       const q = new URLSearchParams(location.search);
+      const err = q.get("error");
       const code = q.get("code");
-      const state = q.get("state") || "";
-      const p = new URLSearchParams(state);
-      const ip = p.get("ip");
-      const port = p.get("port") || "8765";
-      if (!code || !ip) {
-        document.body.textContent = "Missing code or state (ip= in state). Check Discord redirect URL.";
+      const status = document.getElementById("status");
+      const manual = document.getElementById("manual");
+
+      if (err) {
+        status.innerHTML = "<span class=\"err\">Discord: " + err + "</span>";
         return;
       }
-      location.href = "http://" + ip + ":" + port + "/callback?code=" + encodeURIComponent(code);
+      if (!code) {
+        status.innerHTML = "<span class=\"err\">No login code in URL.</span><p class=\"hint\">Scan the QR on your Switch (do not open this page directly).</p>";
+        return;
+      }
+
+      function parseTarget(stateRaw, topPort) {
+        const state = (stateRaw || "").trim();
+        if (!state) return null;
+        if (/^\d+\.\d+\.\d+\.\d+$/.test(state))
+          return { ip: state, port: topPort || "8765" };
+        const colon = state.indexOf(":");
+        if (colon > 0 && /^\d+\.\d+\.\d+\.\d+$/.test(state.slice(0, colon)))
+          return { ip: state.slice(0, colon), port: state.slice(colon + 1) || "8765" };
+        try {
+          const p = new URLSearchParams(state);
+          const ip = p.get("ip");
+          if (ip) return { ip: ip, port: p.get("port") || topPort || "8765" };
+        } catch (e) {}
+        return null;
+      }
+
+      const target = parseTarget(q.get("state"), q.get("port"));
+
+      function redirect(ip, port) {
+        location.href = "http://" + ip + ":" + port + "/callback?code=" + encodeURIComponent(code);
+      }
+
+      if (target && target.ip) {
+        redirect(target.ip, target.port);
+        return;
+      }
+
+      status.textContent = "Almost there…";
+      manual.hidden = false;
+      document.getElementById("go").onclick = function () {
+        const ip = document.getElementById("ip").value.trim();
+        if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+          status.innerHTML = "<span class=\"err\">Enter a valid IPv4 address.</span>";
+          return;
+        }
+        redirect(ip, "8765");
+      };
     })();
   </script>
 </body>

@@ -297,6 +297,13 @@ void DiscordApp::draw_login(const OAuthPending& pending, const std::string& hint
     ui::draw_text(renderer_, font_small_, hint, 368, 148, theme::text_muted());
     ui::draw_text(renderer_, font_tiny_, "Use the same Wi-Fi on your phone and Switch.",
                   368, 176, theme::text_muted());
+    if (!pending.switch_ip.empty()) {
+        ui::draw_text(renderer_, font_small_, "Switch IP: " + pending.switch_ip, 368, 200,
+                      theme::header_primary());
+        ui::draw_text(renderer_, font_tiny_,
+                      "If the phone page asks for IP, type this address.", 368, 224,
+                      theme::text_muted());
+    }
 
     if (cached_qr.modules > 0) {
         const int max_px = 320;
@@ -305,7 +312,7 @@ void DiscordApp::draw_login(const OAuthPending& pending, const std::string& hint
             pixel = 4;
         const int drawn = (cached_qr.modules + 8) * pixel;
         const int qx = (1280 - drawn) / 2 + 4 * pixel;
-        const int qy = 210;
+        const int qy = 250;
         ui::qr_draw(renderer_, qx, qy, pixel, cached_qr, {32, 34, 37, 255}, {255, 255, 255, 255});
     } else {
         ui::draw_text(renderer_, font_small_, "QR could not be generated.", 368, 240, theme::brand());

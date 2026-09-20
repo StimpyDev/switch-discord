@@ -355,7 +355,9 @@ bool oauth_begin(const AppConfig& config, OAuthPending& pending, std::string& er
 
     pending.code_verifier = random_verifier(64);
     std::string challenge = pkce_challenge(pending.code_verifier);
-    std::string state = "ip=" + ip + "&port=" + std::to_string(kCallbackPort);
+    // State must not contain '&' — browsers/Discord treat it as a new query param.
+    pending.switch_ip = ip;
+    std::string state = ip + ":" + std::to_string(kCallbackPort);
     pending.authorize_url = build_authorize_url(config, challenge, state);
 
     pending.listen_fd = socket(AF_INET, SOCK_STREAM, 0);

@@ -22,6 +22,7 @@ std::string build_authorize_url(const AppConfig& config, const std::string& code
 struct OAuthPending {
     std::string authorize_url;
     std::string code_verifier;
+    std::string switch_ip;
     int listen_fd = -1;
 };
 

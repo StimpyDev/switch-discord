@@ -1,4 +1,4 @@
-# Switchcord 1.0.1
+# Switchcord 1.0.3
 
 Unofficial Discord text client for Nintendo Switch (homebrew). Not made or endorsed by Discord.
 
@@ -24,19 +24,30 @@ Folder: `switch/switchcord/`
 ```ini
 client_id=YOUR_ID
 redirect_uri=https://stimpydev.github.io/switch-discord/oauth-relay.html
-oauth_scopes=identify guilds dm_channels.read
+oauth_scopes=identify guilds
 ```
 
-Sign in: scan QR on Switch, approve on phone (same Wi‑Fi).
+**Scopes:** Only use public scopes. `dm_channels.read`, `messages.read`, and `relationships.read` are partner-only — Discord returns `invalid_scope`.
+
+Sign in: scan QR on Switch, approve on phone (same Wi‑Fi). Delete `auth.json` after changing scopes.
+
+### Channel list blocked?
+
+Discord often blocks `/guilds/.../channels` for OAuth apps. Set IDs from desktop Discord (Settings → Advanced → Developer Mode, then right‑click server/channel → Copy ID):
+
+```ini
+guild_id=123456789012345678
+channel_id=123456789012345678
+```
 
 ## Controls
 
 | Button | |
 |--------|---|
-| **−** | DMs / Friends / Servers |
-| **L / R** | List |
-| **A** | Open DM or send message |
-| **X / Y** | Previous / next server (from any tab) |
+| **−** | Servers / info |
+| **L / R** | Channel list |
+| **A** | Open channel or send message |
+| **X / Y** | Previous / next server |
 | **+** | Quit |
 
 ## Build
@@ -53,8 +64,11 @@ Output: `build/switchcord.nro`
 
 ## Limits
 
-- Text only, message polling (~3s)
-- Friends list needs scopes Discord does not give most apps
+- OAuth: **identify** + **guilds** (profile + server list)
+- No DMs or friends without Discord partner approval
+- Message history may be blocked (403) on some channels
+- Avatars are initials only (no CDN images yet)
+- Live updates need Gateway (planned: `switch-wslay`)
 - Unofficial client — use at your own risk
 
 MIT license. Discord is a trademark of Discord Inc.

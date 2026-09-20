@@ -28,6 +28,7 @@ public:
                       Message& out, std::string& error);
     bool get_guild_channels(const std::string& guild_id, std::vector<Channel>& out,
                             std::string& error);
+    bool get_channel(const std::string& channel_id, Channel& out, std::string& error);
     bool get_user_guilds(std::vector<Guild>& out, std::string& error);
     bool get_dm_channels(std::vector<Channel>& out, std::string& error);
     bool get_relationships(std::vector<FriendEntry>& out, std::string& error);

@@ -2,7 +2,9 @@
 #include "paths.hpp"
 
 #include <cstdio>
+#include <sstream>
 #include <string>
+#include <unordered_set>
 
 namespace {
 
@@ -41,6 +43,26 @@ bool parse_line(const std::string& line, AppConfig& cfg) {
     return true;
 }
 
+std::string sanitize_oauth_scopes(const std::string& raw) {
+    static const std::unordered_set<std::string> allowed = {
+        "identify",        "guilds",           "guilds.join", "guilds.members.read",
+        "email",           "connections",      "gdm.join",    "role_connections.write",
+    };
+    std::istringstream iss(raw);
+    std::string part;
+    std::string out;
+    while (iss >> part) {
+        if (!allowed.count(part))
+            continue;
+        if (!out.empty())
+            out += ' ';
+        out += part;
+    }
+    if (out.empty())
+        out = "identify guilds";
+    return out;
+}
+
 } // namespace
 
 bool load_config(AppConfig& out, std::string& error) {
@@ -69,6 +91,8 @@ bool load_config(AppConfig& out, std::string& error) {
         error = "config.ini: redirect_uri is required (OAuth relay URL)";
         return false;
     }
+
+    cfg.oauth_scopes = sanitize_oauth_scopes(cfg.oauth_scopes);
 
     out = std::move(cfg);
     return true;

@@ -180,33 +180,57 @@ bool DiscordApp::init(std::string& error) {
             have_me_ = api_->get_current_user(me_, me_err);
         if (!have_me_) {
             delete_saved_session();
-            error = "Login expired — delete auth.json was done; restart and scan QR again.";
-            return false;
+            user_session_ = {};
+            if (!resolve_user_session(error))
+                return false;
+            api_.emplace(user_session_.access_token);
+            api_->set_token_refresher([this](std::string& new_token, std::string& err) {
+                if (!refresh_user_access_token(config_, user_session_, err))
+                    return false;
+                new_token = user_session_.access_token;
+                return !new_token.empty();
+            });
+            have_me_ = api_->get_current_user(me_, me_err);
+            if (!have_me_) {
+                error = "Could not sign in. Check config.ini scopes (identify guilds).";
+                return false;
+            }
         }
     }
 
     load_guilds();
-    load_friends();
-    load_dm_channels();
-    set_tab(SidebarTab::DirectMessages);
 
-    if (!config_.guild_id.empty()) {
-        tab_ = SidebarTab::Guild;
-        for (size_t i = 0; i < guilds_.size(); ++i) {
-            if (guilds_[i].id == config_.guild_id) {
-                selected_guild_ = i;
-                select_guild(i);
-                break;
+    if (!guilds_.empty()) {
+        selected_guild_ = 0;
+        if (!config_.guild_id.empty()) {
+            for (size_t i = 0; i < guilds_.size(); ++i) {
+                if (guilds_[i].id == config_.guild_id) {
+                    selected_guild_ = i;
+                    break;
+                }
             }
         }
+        select_guild(selected_guild_);
+    } else {
+        tab_ = SidebarTab::Guild;
+        status_line_ = "No servers on this account.";
     }
 
     if (!config_.channel_id.empty()) {
+        bool picked = false;
         for (size_t i = 0; i < channels_.size(); ++i) {
             if (channels_[i].id == config_.channel_id) {
                 select_channel(i);
+                picked = true;
                 break;
             }
+        }
+        if (!picked) {
+            std::string ch_err;
+            if (apply_configured_channel(ch_err))
+                status_line_.clear();
+            else if (!ch_err.empty())
+                status_line_ = ch_err;
         }
     }
 
@@ -343,10 +367,7 @@ void DiscordApp::set_tab(SidebarTab tab) {
     channels_.clear();
     if (tab_ == SidebarTab::DirectMessages)
         load_dm_channels();
-    else if (tab_ == SidebarTab::Friends) {
-        load_friends();
-        status_line_.clear();
-    } else if (tab_ == SidebarTab::Guild && !guilds_.empty())
+    else if (tab_ == SidebarTab::Guild && !guilds_.empty())
         select_guild(selected_guild_);
     else if (tab_ == SidebarTab::Guild)
         status_line_ = "No servers";
@@ -377,29 +398,41 @@ void DiscordApp::load_guilds() {
 }
 
 void DiscordApp::load_dm_channels() {
-    std::string err;
-    if (!api_ || !api_->get_dm_channels(channels_, err)) {
-        status_line_ = err;
-        return;
-    }
-    if (channels_.empty()) {
-        clear_chat_view();
-        status_line_ = "No DMs";
-    } else {
-        selected_channel_ = 0;
-        select_channel(0);
-        status_line_.clear();
-    }
+    channels_.clear();
+    clear_chat_view();
+    status_line_ =
+        "DMs need partner OAuth scopes. Use servers + channel_id in config.ini.";
     dirty_ = true;
 }
 
 void DiscordApp::load_friends() {
-    std::string err;
-    if (!api_ || !api_->get_relationships(friends_, err)) {
-        status_line_ = err;
-        return;
-    }
+    friends_.clear();
+    status_line_ = "Friends list not available with public OAuth scopes.";
     dirty_ = true;
+}
+
+bool DiscordApp::apply_configured_channel(std::string& error) {
+    if (config_.channel_id.empty() || !api_)
+        return false;
+    discord::Channel ch;
+    if (api_->get_channel(config_.channel_id, ch, error)) {
+        if (ch.name.empty())
+            ch.name = "channel";
+        if (ch.type != 0 && ch.type != 5)
+            ch.type = 0;
+    } else {
+        ch.id = config_.channel_id;
+        ch.name = "channel";
+        ch.type = 0;
+        error.clear();
+    }
+    channels_.clear();
+    channels_.push_back(std::move(ch));
+    tab_ = SidebarTab::Guild;
+    select_channel(0);
+    status_line_ = "Using channel_id from config.ini";
+    dirty_ = true;
+    return true;
 }
 
 void DiscordApp::select_friend(size_t index) {
@@ -498,7 +531,14 @@ void DiscordApp::select_guild(size_t index) {
     std::string err;
     channels_.clear();
     if (!api_ || !api_->get_guild_channels(guilds_[selected_guild_].id, channels_, err)) {
-        status_line_ = err;
+        if (apply_configured_channel(err))
+            return;
+        if (err.find("403") != std::string::npos)
+            status_line_ =
+                "Channel list blocked. Set channel_id in config.ini (Discord: Copy Channel ID).";
+        else
+            status_line_ = err;
+        dirty_ = true;
         return;
     }
     std::sort(channels_.begin(), channels_.end(),
@@ -545,7 +585,12 @@ void DiscordApp::refresh_messages() {
     std::string err;
     std::vector<discord::Message> fetched;
     if (!api_ || !api_->get_channel_messages(active_channel_id_, 50, fetched, err)) {
-        status_line_ = err;
+        if (err.find("403") != std::string::npos || err.find("401") != std::string::npos)
+            status_line_ =
+                "Cannot read messages (OAuth limit). Try another channel or re-login.";
+        else
+            status_line_ = err;
+        dirty_ = true;
         return;
     }
     std::reverse(fetched.begin(), fetched.end());
@@ -599,10 +644,6 @@ void DiscordApp::handle_input(const SDL_Event& ev) {
     if (ev.type == SDL_JOYBUTTONDOWN) {
         switch (ev.jbutton.button) {
         case 0: { // A
-            if (tab_ == SidebarTab::Friends && !friends_.empty() && active_channel_id_.empty()) {
-                select_friend(selected_friend_);
-                break;
-            }
             std::string text;
             if (open_compose_keyboard(text) && !active_channel_id_.empty()) {
                 discord::Message sent;
@@ -624,9 +665,7 @@ void DiscordApp::handle_input(const SDL_Event& ev) {
             break;
         }
         case 4: { // L
-            if (tab_ == SidebarTab::Friends && !friends_.empty() && selected_friend_ > 0)
-                select_friend(selected_friend_ - 1);
-            else if (!channels_.empty()) {
+            if (!channels_.empty()) {
                 size_t i = selected_channel_;
                 while (i > 0) {
                     --i;
@@ -639,10 +678,7 @@ void DiscordApp::handle_input(const SDL_Event& ev) {
             break;
         }
         case 5: { // R
-            if (tab_ == SidebarTab::Friends && !friends_.empty() &&
-                selected_friend_ + 1 < friends_.size())
-                select_friend(selected_friend_ + 1);
-            else if (!channels_.empty()) {
+            if (!channels_.empty()) {
                 for (size_t i = selected_channel_ + 1; i < channels_.size(); ++i) {
                     if (is_text_channel(channels_[i])) {
                         select_channel(i);
@@ -670,10 +706,8 @@ void DiscordApp::handle_input(const SDL_Event& ev) {
                 select_guild(g);
             }
             break;
-        case 9: // Minus — cycle DM / Friends / Guild
+        case 9: // Minus — Servers <-> info
             if (tab_ == SidebarTab::DirectMessages)
-                set_tab(SidebarTab::Friends);
-            else if (tab_ == SidebarTab::Friends)
                 set_tab(SidebarTab::Guild);
             else
                 set_tab(SidebarTab::DirectMessages);
@@ -717,8 +751,6 @@ void DiscordApp::draw() {
     int sy = 12;
     draw_server_rail_icon(renderer_, font_small_, sy, tab_ == SidebarTab::DirectMessages, true, {});
     sy += kServerIcon + 8;
-    draw_server_rail_icon(renderer_, font_small_, sy, tab_ == SidebarTab::Friends, false, "F");
-    sy += kServerIcon + 8;
     ui::fill_hline(renderer_, 16, sy, 40, theme::divider());
     sy += 8;
 
@@ -733,10 +765,10 @@ void DiscordApp::draw() {
 
     const int panel_x = kServerRail;
     std::string panel_title = "Direct Messages";
-    if (tab_ == SidebarTab::Guild && !guilds_.empty())
+    if (tab_ == SidebarTab::DirectMessages)
+        panel_title = "About";
+    else if (tab_ == SidebarTab::Guild && !guilds_.empty())
         panel_title = guilds_[selected_guild_].name;
-    else if (tab_ == SidebarTab::Friends)
-        panel_title = "Friends";
 
     ui::draw_text(renderer_, font_, truncate_line(panel_title, 22), panel_x + 16, 14,
                   theme::header_primary());
@@ -745,19 +777,22 @@ void DiscordApp::draw() {
     int cy = kHeaderH + 8;
     const int row_h = 34;
 
-    if (tab_ == SidebarTab::Friends) {
-        for (size_t i = 0; i < friends_.size() && cy < list_h - 8; ++i) {
-            const bool sel = i == selected_friend_;
-            if (sel)
-                ui::fill_rounded(renderer_, {panel_x + 8, cy, kChannelPanel - 16, row_h - 2}, 4,
-                                 theme::bg_selected());
-            draw_avatar(renderer_, font_tiny_, panel_x + 28, cy + row_h / 2, 14,
-                        friends_[i].display_name);
-            SDL_Color col = sel ? theme::text_normal() : theme::text_muted();
-            ui::draw_text(renderer_, font_small_, friends_[i].display_name, panel_x + 48, cy + 8,
-                          col);
-            cy += row_h;
-        }
+    if (tab_ == SidebarTab::DirectMessages) {
+        ui::draw_text(renderer_, font_small_,
+                      "Public OAuth: identify + guilds only.", panel_x + 16, cy,
+                      theme::text_muted(), kChannelPanel - 32);
+        cy += 28;
+        ui::draw_text(renderer_, font_small_,
+                      "DMs/Friends need Discord partner scopes.", panel_x + 16, cy,
+                      theme::text_muted(), kChannelPanel - 32);
+        cy += 28;
+        ui::draw_text(renderer_, font_small_,
+                      "Set guild_id + channel_id in config.ini", panel_x + 16, cy,
+                      theme::text_muted(), kChannelPanel - 32);
+        cy += 28;
+        ui::draw_text(renderer_, font_small_,
+                      "if channel list is blocked.", panel_x + 16, cy, theme::text_muted(),
+                      kChannelPanel - 32);
     } else {
         for (size_t i = 0; i < channels_.size() && cy < list_h - 8; ++i) {
             const auto& ch = channels_[i];
@@ -801,16 +836,12 @@ void DiscordApp::draw() {
     ui::draw_text(renderer_, font_tiny_, "online", panel_x + 50, list_h + 30, theme::text_muted());
 
     std::string chat_title;
-    bool chat_is_dm = tab_ == SidebarTab::DirectMessages || tab_ == SidebarTab::Friends;
-    if (tab_ == SidebarTab::Friends && !friends_.empty() && !active_channel_id_.empty())
-        chat_title = friends_[selected_friend_].display_name;
+    bool chat_is_dm = tab_ == SidebarTab::DirectMessages;
+    if (tab_ == SidebarTab::DirectMessages)
+        chat_title = "Switchcord";
     else if (!channels_.empty() && selected_channel_ < channels_.size() &&
              is_text_channel(channels_[selected_channel_]))
         chat_title = channels_[selected_channel_].name;
-    else if (tab_ == SidebarTab::DirectMessages)
-        chat_title = "Direct Messages";
-    else if (tab_ == SidebarTab::Friends)
-        chat_title = "Friends";
     else
         chat_title = panel_title;
 

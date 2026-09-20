@@ -51,6 +51,7 @@ private:
     void set_tab(SidebarTab tab);
     void clear_chat_view();
     bool refresh_api_token();
+    bool apply_configured_channel(std::string& error);
 
     AppConfig config_;
     UserSession user_session_;

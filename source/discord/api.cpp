@@ -450,6 +450,24 @@ bool Api::open_dm_channel(const std::string& user_id, Channel& out, std::string&
     return true;
 }
 
+bool Api::get_channel(const std::string& channel_id, Channel& out, std::string& error) {
+    long code = 0;
+    std::string body;
+    std::string path = "/channels/" + channel_id;
+    if (!request("GET", path, "", code, body, error))
+        return false;
+
+    json_error_t jerr{};
+    json_t* root = json_loads(body.c_str(), 0, &jerr);
+    if (!root) {
+        error = jerr.text;
+        return false;
+    }
+    out = parse_channel(root);
+    json_decref(root);
+    return true;
+}
+
 bool Api::get_guild_channels(const std::string& guild_id, std::vector<Channel>& out,
                              std::string& error) {
     long code = 0;

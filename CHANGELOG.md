@@ -8,9 +8,15 @@
 - Discord-style UI, token refresh, rate-limit retry
 - Cleaner login copy on Switch and OAuth relay pages
 
+## 1.0.3
+
+- Drop partner-only scopes (`dm_channels.read` etc.); sanitize scopes in config at load
+- Start on servers; `channel_id` fallback when channel list is 403
+- No API calls for DMs/friends; info screen explains OAuth limits
+- Re-login flow when saved token is invalid
+
 ## 1.0.2
 
-- OAuth scope `dm_channels.read` for DMs (re-login required)
 - Auto refresh token on HTTP 401; fix exit crash (curl cleanup order)
 - **X / Y** selects servers from any tab
 

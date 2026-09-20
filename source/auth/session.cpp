@@ -72,12 +72,6 @@ std::string random_verifier(size_t len) {
     return out;
 }
 
-std::string pkce_challenge(const std::string& verifier) {
-    unsigned char hash[32];
-    sha256CalculateHash(hash, verifier.data(), verifier.size());
-    return base64url_encode(hash, 32);
-}
-
 std::string url_encode(const std::string& s) {
     std::ostringstream oss;
     for (unsigned char c : s) {
@@ -228,6 +222,7 @@ bool token_request(const AppConfig& config, const std::string& body, UserSession
 
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded");
+    headers = curl_slist_append(headers, "User-Agent: Switchcord (OAuth)");
     if (!config.client_secret.empty()) {
         std::string basic = config.client_id + ":" + config.client_secret;
         // Discord accepts client_id/client_secret in POST body instead for simplicity
